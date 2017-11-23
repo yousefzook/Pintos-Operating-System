@@ -165,12 +165,17 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
+
 
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
+
+  if(timer_ticks () % TIMER_FREQ == 0)
+    update_load_avg();
+
   thread_tick ();
 }
 

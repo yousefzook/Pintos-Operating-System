@@ -89,9 +89,11 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
-
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    
+    int nice;                           /* Niceness of a thread. */
+    real recent_cpu;                    /* An estimate of the CPU time the thread has used recently. */
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -106,6 +108,8 @@ struct thread
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+void update_load_avg(void);
 
 void thread_init (void);
 void thread_start (void);

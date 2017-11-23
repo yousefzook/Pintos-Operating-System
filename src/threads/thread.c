@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/real.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -37,6 +38,9 @@ static struct thread *initial_thread;
 /* Lock used by allocate_tid(). */
 static struct lock tid_lock;
 
+/* Lock used when setting recent_cpu value. */
+static struct lock thread_recent_cpu_lock;
+
 /* Stack frame for kernel_thread(). */
 struct kernel_thread_frame 
   {
@@ -49,6 +53,8 @@ struct kernel_thread_frame
 static long long idle_ticks;    /* # of timer ticks spent idle. */
 static long long kernel_ticks;  /* # of timer ticks in kernel threads. */
 static long long user_ticks;    /* # of timer ticks in user programs. */
+
+static real load_avg;           /* Estimation of the average number of threads ready to run over the past minute. */
 
 /* Scheduling. */
 #define TIME_SLICE 4            /* # of timer ticks to give each thread. */
@@ -71,6 +77,11 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+void update_priority_for_all_ready_threads(void);
+int thread_get_recent_cpu(void);
+int thread_get_load_avg(void);
+int thread_get_nice(void);
+
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
    general and it is possible in this case only because loader.S
@@ -90,6 +101,7 @@ thread_init (void)
   ASSERT (intr_get_level () == INTR_OFF);
 
   lock_init (&tid_lock);
+  lock_init (&thread_recent_cpu_lock);
   list_init (&ready_list);
   list_init (&all_list);
 
@@ -117,6 +129,8 @@ thread_start (void)
   sema_down (&idle_started);
 }
 
+int minute_tick;
+
 /* Called by the timer interrupt handler at each timer tick.
    Thus, this function runs in an external interrupt context. */
 void
@@ -134,9 +148,15 @@ thread_tick (void)
   else
     kernel_ticks++;
 
+  lock_acquire (&thread_recent_cpu_lock);
+  t->recent_cpu++; // every tick increase the running thread recent_cpu.
+  lock_release (&thread_recent_cpu_lock);
+
   /* Enforce preemption. */
-  if (++thread_ticks >= TIME_SLICE)
+  if (++thread_ticks >= TIME_SLICE){
+    update_priority_for_all_ready_threads(); // every 4 ticks update priorities of threads
     intr_yield_on_return ();
+  }
 }
 
 /* Prints thread statistics. */
@@ -355,34 +375,34 @@ thread_get_priority (void)
 
 /* Sets the current thread's nice value to NICE. */
 void
-thread_set_nice (int nice UNUSED) 
+thread_set_nice (int nice) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
-{
-  /* Not yet implemented. */
-  return 0;
+{ 
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int int_load_avg = real_to_int(load_avg);
+  return int_load_avg*100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  int int_recent_cpu = real_to_int(thread_current()->recent_cpu);
+  return int_recent_cpu*100;
 }
+
 
 /* Idle thread.  Executes when no other thread is ready to run.
 
@@ -493,10 +513,15 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (list_empty (&ready_list))
-    return idle_thread;
-  else
-    return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  if (thread_mlfqs){
+    return BSD_next_thread();
+  }
+  else{
+    if (list_empty (&ready_list))
+      return idle_thread;
+    else
+      return list_entry (list_pop_front (&ready_list), struct thread, elem);
+  }
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -585,3 +610,83 @@ allocate_tid (void)
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
+
+
+/* find next running thread in case of using BSD schedular.
+   loop in ready list and return the first thread with maximum priority. */
+static struct thread * BSD_next_thread (void) 
+{
+  int current_max_priority = 0;
+  struct thread *next_running_thread;
+  struct list_elem *e;
+  for (e = list_end (&ready_list); e != list_begin (&ready_list); e = list_prev (e)){
+    struct thread *t = list_entry (e, struct thread, ready_list);
+    if(t->priority >= current_max_priority){
+      current_max_priority = t->priority;
+      next_thread = t;
+    }
+   }
+  return next_running_thread;
+}
+
+/* Update priority for all ready threads.
+   priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
+void update_priority_for_all_ready_threads(void)
+{  
+  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)){
+    struct thread *t = list_entry (e, struct thread, ready_list);
+    real new_priority;
+
+    real recent_cpu_over_4 = div(int_to_real(t->recent_cpu) , int_to_real(4));
+    real PRI_MAX_real = int_to_real(PRI_MAX);
+    real double_nice_real = int_to_real(t->nice) * int_to_real(2);
+
+    new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
+    t->priority = real_to_int(new_priority);
+  } 
+}
+
+/* Update recent_cpu value for all threads including runnig thread.
+   recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
+void update_recent_cpu_for_all(void)
+{
+
+  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e))
+  {
+    struct thread *t = list_entry (e, struct thread, ready_list);
+    update_recent_cpu(t);
+  }
+  lock_acquire(&thread_recent_cpu_lock);
+  update_recent_cpu(thread_current());
+  lock_release(&thread_recent_cpu_lock);
+}
+
+void update_recent_cpu(struct thread * t)
+{
+  real nice_real = int_to_real(t->nice);
+  real recent_cpu_real = int_to_real(t->recent_cpu);
+
+  real temp1 = mul(load_avg, int_to_real(2)); // la*2
+  real temp2 = add(temp1, int_to_real(1)); // la*2+1
+  real temp3 = div(temp1, temp2); //la*2 / la*2+1
+  // la*2 / la*2+1 * recent_cpu + nice
+  recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
+  t->recent_cpu = real_to_int(recent_cpu_real);
+}
+
+
+/* Update load average every minute.
+   load_avg = (59/60)*load_avg + (1/60)*# of ready_threads*/
+void update_load_avg(void)
+{
+  real sixty_real = int_to_real(60);
+  real fifty_nine_real = int_to_real(50);
+
+  int ready_threads_number = list_size(&ready_list);
+  real ready_threads_number_real = int_to_real(ready_threads_number);
+
+  real temp1 = div(mul(fifty_nine_real, load_avg), sixty_real);
+  real temp2 = div(ready_threads_number_real, sixty_real);
+
+  load_avg = add(temp1, temp2);
+}

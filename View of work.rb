@@ -103,7 +103,7 @@ Section:
 	 we can do this by loop reversly and make var called max .. if thread.priority >= max then take it ,, we make >=  not > only to find the first thread with higher priority
 	 we check on priority as int not real to make it round robin per queue
 	 Summary: we use round robin for each queue and start with queue with higher priority
-- Each 4 ticks compute priority equation: priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+- Each 4 ticks compute priority equation: priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) <for all ready threasds>
 	recent_cpu >> for each tick>> running thread.recent_cpu++ < very greater than nice >
 		for each second>> all threads including running.recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice
 			hint: there is a critical section >> as running thread can change by decreasing every second and increasing every tick <use mutex not interrupts disable>
