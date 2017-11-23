@@ -25,18 +25,13 @@
    PROVIDE MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR
    MODIFICATIONS.
 */
-
+#include "threads/thread.h"
 #include "threads/synch.h"
 #include <stdio.h>
 #include <string.h>
 #include "threads/interrupt.h"
-#include "threads/thread.h"
+//#include "threads/thread.h"
 
-
-/* priority inheritance donation function
-   for dynamic scheduling
-*/
-static void donate(struct thread * t);
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -118,8 +113,8 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
+  if (!list_empty (&sema->waiters))
+    thread_unblock (list_entry (list_max(&sema->waiters,less_than ,NULL),
                                 struct thread, elem));
   sema->value++;
   intr_set_level (old_level);
@@ -205,11 +200,15 @@ lock_acquire (struct lock *lock)
   if(!success)
   {
     thread_current()->obstacle_thread = lock->holder;
-    donate(thread_current());
+    donate_priority(thread_current());
     sema_down (&lock->semaphore);
     lock->holder = thread_current ();
     
+  }else{
+    thread_current()->number_of_locks++;
+    thread_current()->obstacle_thread = NULL;
   }
+
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -242,7 +241,17 @@ lock_release (struct lock *lock)
 {
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
-
+  thread_current()->number_of_locks--;
+  if(!thread_mlfqs){
+    if(thread_current()->number_of_locks == 0)
+    {
+      stack_clear(&thread_current()->priority_stack);
+    }
+    else
+    {
+      stack_pop(&thread_current()->priority_stack);
+    }  
+  }
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
@@ -347,19 +356,4 @@ cond_broadcast (struct condition *cond, struct lock *lock)
 
   while (!list_empty (&cond->waiters))
     cond_signal (cond, lock);
-}
-
-static void donate(struct thread * t)
-{
-  struct thread * temp = t;
-  while(temp->obstacle_thread != NULL)
-  {
-    if(get_cur_priority(temp)>get_cur_priority(obstacle_thread))
-    {
-      stack_push(&obstacle_thread->stack,temp->priority);
-      temp = obstacle_thread;
-    }
-    else
-      return;
-  }
 }
