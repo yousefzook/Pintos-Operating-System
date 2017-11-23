@@ -11,7 +11,6 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "threads/real.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -77,10 +76,13 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static struct thread * BSD_next_thread(void);
 void update_priority_for_all_ready_threads(void);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 int thread_get_nice(void);
+void update_recent_cpu_for_all(void);
+void update_recent_cpu(struct thread *);
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -149,7 +151,7 @@ thread_tick (void)
     kernel_ticks++;
 
   lock_acquire (&thread_recent_cpu_lock);
-  t->recent_cpu++; // every tick increase the running thread recent_cpu.
+  t->recent_cpu.value++ ; // every tick increase the running thread recent_cpu.
   lock_release (&thread_recent_cpu_lock);
 
   /* Enforce preemption. */
@@ -617,13 +619,13 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 static struct thread * BSD_next_thread (void) 
 {
   int current_max_priority = 0;
-  struct thread *next_running_thread;
+  struct thread *next_running_thread = NULL;
   struct list_elem *e;
   for (e = list_end (&ready_list); e != list_begin (&ready_list); e = list_prev (e)){
-    struct thread *t = list_entry (e, struct thread, ready_list);
+    struct thread *t = list_entry (e, struct thread, allelem);
     if(t->priority >= current_max_priority){
       current_max_priority = t->priority;
-      next_thread = t;
+      next_running_thread = t;
     }
    }
   return next_running_thread;
@@ -633,13 +635,14 @@ static struct thread * BSD_next_thread (void)
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void update_priority_for_all_ready_threads(void)
 {  
+  struct list_elem *e;
   for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)){
-    struct thread *t = list_entry (e, struct thread, ready_list);
+    struct thread *t = list_entry (e, struct thread, allelem);
     real new_priority;
 
-    real recent_cpu_over_4 = div(int_to_real(t->recent_cpu) , int_to_real(4));
+    real recent_cpu_over_4 = div(t->recent_cpu , int_to_real(4));
     real PRI_MAX_real = int_to_real(PRI_MAX);
-    real double_nice_real = int_to_real(t->nice) * int_to_real(2);
+    real double_nice_real = mul(int_to_real(t->nice), int_to_real(2));
 
     new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
     t->priority = real_to_int(new_priority);
@@ -650,10 +653,10 @@ void update_priority_for_all_ready_threads(void)
    recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
 void update_recent_cpu_for_all(void)
 {
-
+  struct list_elem *e;
   for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e))
   {
-    struct thread *t = list_entry (e, struct thread, ready_list);
+    struct thread *t = list_entry (e, struct thread, allelem);
     update_recent_cpu(t);
   }
   lock_acquire(&thread_recent_cpu_lock);
@@ -664,14 +667,14 @@ void update_recent_cpu_for_all(void)
 void update_recent_cpu(struct thread * t)
 {
   real nice_real = int_to_real(t->nice);
-  real recent_cpu_real = int_to_real(t->recent_cpu);
+  real recent_cpu_real = t->recent_cpu;
 
   real temp1 = mul(load_avg, int_to_real(2)); // la*2
   real temp2 = add(temp1, int_to_real(1)); // la*2+1
   real temp3 = div(temp1, temp2); //la*2 / la*2+1
   // la*2 / la*2+1 * recent_cpu + nice
   recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
-  t->recent_cpu = real_to_int(recent_cpu_real);
+  t->recent_cpu = recent_cpu_real;
 }
 
 
