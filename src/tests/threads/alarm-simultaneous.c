@@ -16,7 +16,7 @@ void
 test_alarm_simultaneous (void) 
 {
   test_sleep (3, 5);
-}
+} 
 
 /* Information about the test. */
 struct sleep_test 

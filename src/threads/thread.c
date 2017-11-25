@@ -692,22 +692,22 @@ void update_recent_cpu(struct thread * t)
    load_avg = (59/60)*load_avg + (1/60)*# of ready_threads*/
 void update_load_avg(void)
 {
-  printf("load_avg before: %d\n", load_avg);
+  // printf("load_avg before: %d\n", load_avg);
   is_second = true;
   real sixty_real = int_to_real(60);
   real fifty_nine_real = int_to_real(59);
-  printf("60_real: %d\n", sixty_real.value);
-  printf("59_real: %d\n", fifty_nine_real.value);
+  // printf("60_real: %d\n", sixty_real.value);
+  // printf("59_real: %d\n", fifty_nine_real.value);
 
   int ready_threads_number = list_size(&ready_list);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
   real temp1 = div(mul(fifty_nine_real, load_avg), sixty_real);
   real temp2 = div(ready_threads_number_real, sixty_real);
-  printf("(59/60)*load_avg: %d\n", temp1.value);
-  printf("# of ready_threads: %d\n", ready_threads_number);
+  // printf("(59/60)*load_avg: %d\n", temp1.value);
+  // printf("# of ready_threads: %d\n", ready_threads_number);
 
   load_avg = add(temp1, temp2);
-  printf("load_avg after: %d\n", load_avg);
+  // printf("load_avg after: %d\n", load_avg);
 
 }
