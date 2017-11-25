@@ -89,12 +89,14 @@ struct thread
     uint8_t *stack;                     /* Saved stack pointer. */
     int number_of_locks;                /* number of locks that the thread acquires */
     int priority;                       /* Priority. */
-    struct stack priority_stack;       /* stack of past priorities inherited */
+    struct list priority_list;       /* stack of past priorities inherited */
     struct thread* obstacle_thread;     /* the obstacling thread that this thread is waiting for */
-    struct list_elem allelem;           /* List element for all threads list. */
 
+    struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    struct list_elem sleep_elem;              /* sleep element */
+
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -149,5 +151,8 @@ bool less_than (const struct list_elem *a,
    for dynamic scheduling
 */
 void donate_priority(struct thread * t);
+
+void restore_priority(struct thread * thread,struct list * list);
+
 
 #endif /* threads/thread.h */

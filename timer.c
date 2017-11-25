@@ -33,13 +33,12 @@ static void real_time_delay (int64_t num, int32_t denom);
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 
-static struct condition time_changed;
-static struct lock timer_lock;
+static struct list sleepers;
+
 void
 timer_init (void) 
 {
-  cond_init(&time_changed);
-  lock_init(&timer_lock);
+  list_init(&sleepers);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -94,15 +93,21 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
+  if (ticks <1)
+	return;
   int64_t start = timer_ticks ();
 
   ASSERT (intr_get_level () == INTR_ON);
- // while (timer_elapsed (start) < ticks) 
-   // thread_yield ();
-  lock_acquire(&timer_lock);
-  while (timer_elapsed (start) < ticks) 
-    cond_wait(&time_changed,&timer_lock);
-  lock_release(&timer_lock);
+  if (timer_elapsed (start) < ticks) 
+    {
+    	enum intr_level old_level;
+    	old_level = intr_disable();
+    	thread_current()->sleep_elem.value = ticks;
+    	list_push_front(&sleepers,&thread_current()->sleep_elem);
+    	thread_block(); 
+    	intr_set_level (old_level);
+    	
+    }
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -179,10 +184,22 @@ timer_print_stats (void)
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
+  
+  if(!list_empty(&sleepers))
+  {
+	struct list_elem *e;
+    for(e = list_begin(&sleepers);e != list_end(&sleepers);e = list_next(e))
+    {
+	  struct thread * t = list_entry(e,struct thread,sleep_elem);
+	  t->sleep_elem.value--;
+	  if(t->sleep_elem.value <= 0)
+	  	{
+	  		thread_unblock(list_entry(&t->sleep_elem,struct thread,sleep_elem));
+	  		list_remove(&t->sleep_elem);
+	  	}
+	}
+  }
   ticks++;
-  lock_acquire(&timer_lock);
-  cond_broadcast(&time_changed,&timer_lock);
-  lock_release(&timer_lock);
   thread_tick ();
 }
 

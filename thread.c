@@ -77,6 +77,9 @@ static struct thread *mlfqs_scheduler(void);
 /* function pointer that points to one of the two scheuling 
    functions based on the thread_mlfqs boolean
 */
+
+static int get_last_priority(struct thread * t);
+
 static struct thread * (*choose_next)(void);
 
 
@@ -196,8 +199,6 @@ thread_create (const char *name, int priority,
   /* Initialize thread. */
   init_thread (t, name, priority);
   tid = t->tid = allocate_tid ();
-  t->number_of_locks = 0;
-  stack_init(&t->priority_stack);
 
   /* Prepare thread for first run by initializing its stack.
      Do this atomically so intermediate values for the 'stack' 
@@ -238,7 +239,6 @@ thread_block (void)
 {
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
-
   thread_current ()->status = THREAD_BLOCKED;
   schedule ();
 }
@@ -365,7 +365,7 @@ thread_set_priority (int new_priority)
 int
 thread_get_priority (void) 
 {
-  return thread_current ()->priority;
+  return get_last_priority(thread_current ());
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -484,6 +484,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
   t->magic = THREAD_MAGIC;
+  t->number_of_locks = 0;
+  list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -511,7 +513,11 @@ next_thread_to_run (void)
   if (list_empty (&ready_list))
     return idle_thread;
   else
-    return choose_next();
+    return priority_scheduler();
+    //return priority_scheduler();
+    //return choose_next();
+    //return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -605,43 +611,64 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
    auxiliary data AUX.  Returns true if A is less than B, or
    false if A is greater than or equal to B. */
 
-static int get_most_recent_priority(struct thread * t)
+
+static int get_last_priority(struct thread * t)
 {
-  struct stack * s = &t->priority_stack;
-  return stack_isEmpty(s) ? t->priority : stack_top(s)->value;
+  return list_empty(&t->priority_list) ? t->priority : list_begin(&t->priority_list)->value;
+}
+
+
+void donate_priority(struct thread * new_thread)
+{
+  if(new_thread == NULL)
+    return;
+  struct thread * temp = new_thread;
+  struct thread * obs = temp->obstacle_thread;
+  while(obs != NULL)
+  {
+    if(get_last_priority(temp) >= get_last_priority(obs))
+    {
+      // handle donation... 
+      //struct stack_elem *elem = malloc(sizeof(struct stack_elem));
+      struct list_elem elem;
+      elem.value = temp->priority;
+      list_push_front(&obs->priority_list,&elem);
+      temp = obs;
+      obs = temp->obstacle_thread;
+    }
+    else
+      return;
+  }
+}
+
+void restore_priority(struct thread * t,struct list * list)
+{
+  if(list_empty(&t->priority_list))
+    return;
+  if(t->number_of_locks == 0)
+      list_clear(&t->priority_list);
+  else
+   {
+    struct thread *released = list_entry (list_max(list,less_than ,NULL),
+                                struct thread, elem);
+    struct list * l = &t->priority_list;
+    struct list_elem *e;  
+    for (e = list_begin (l); e != list_end (l); e = list_next (e))
+      if(e->value == released->priority) 
+       return;
+    list_remove(e);
+   } 
 }
 
 bool less_than (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux UNUSED)
 {
-  int p_1 = get_most_recent_priority(list_entry(a,struct thread,elem));
-  int p_2 = get_most_recent_priority(list_entry(b,struct thread,elem));
+  int p_1 = list_entry(a,struct thread,elem)->priority;
+  int p_2 = list_entry(b,struct thread,elem)->priority;
   if(p_1 < p_2)
     return true;
   return false;
-}
-
-
-void donate_priority(struct thread * t)
-{
-  if(t == NULL)
-    return;
-  struct thread * temp = t;
-  struct thread * obs = temp->obstacle_thread;
-  while(obs != NULL)
-  {
-    if(get_most_recent_priority(temp)>=get_most_recent_priority(obs))
-    {
-      // handle donation... 
-      struct stack_elem *elem = malloc(sizeof(struct stack_elem));
-      elem->value = get_most_recent_priority(temp);
-      stack_push(&obs->priority_stack,elem);
-      temp = obs;
-    }
-    else
-      return;
-  }
 }
 
 
@@ -649,7 +676,11 @@ void donate_priority(struct thread * t)
 static struct thread *priority_scheduler(){
 
 /* get max priority */
-  return list_entry(list_max(&ready_list,less_than ,NULL),struct thread, elem);
+  return list_entry (list_pop_front (&ready_list), struct thread, elem);
+    /*
+  struct list_elem *elem = list_max(&ready_list,less_than ,NULL);
+  list_remove(elem);
+  return list_entry(elem,struct thread, elem);*/
 
 }
 

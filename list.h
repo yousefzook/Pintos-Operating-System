@@ -91,6 +91,7 @@ struct list_elem
   {
     struct list_elem *prev;     /* Previous list element. */
     struct list_elem *next;     /* Next list element. */
+    int64_t value;
   };
 
 /* List. */
@@ -178,11 +179,9 @@ void list_unique (struct list *, struct list *duplicates,
 struct list_elem *list_max (struct list *, list_less_func *, void *aux);
 struct list_elem *list_min (struct list *, list_less_func *, void *aux);
 
+void list_clear(struct list *);
 
-//////////
-
-
-
+/*
 struct stack_elem
 {
     struct stack_elem *prev;
@@ -203,7 +202,10 @@ struct stack_elem *stack_begin (struct stack *);
 struct stack_elem *stack_next (struct stack_elem *);
 struct stack_elem *stack_end (struct stack *);
 
+struct stack_elem *stack_head (struct stack *);
+struct stack_elem *stack_tail (struct stack *);
 
+void stack_insert (struct stack_elem *before, struct stack_elem *elem);
 void stack_push (struct stack *, struct stack_elem *);
 struct stack_elem *stack_remove (struct stack_elem *);
 struct stack_elem *stack_pop (struct stack *);
@@ -212,6 +214,6 @@ struct stack_elem *stack_top (struct stack *);
 bool stack_isEmpty (struct stack *);
 
 void stack_clear(struct stack *);
-
+*/
 
 #endif /* lib/kernel/list.h */

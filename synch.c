@@ -113,9 +113,13 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters))
-    thread_unblock (list_entry (list_max(&sema->waiters,less_than ,NULL),
-                                struct thread, elem));
+  if (!list_empty (&sema->waiters)){
+    thread_unblock (list_entry (list_pop_front (&sema->waiters),
+                                 struct thread, elem));
+    /*struct list_elem *e = list_max(&sema->waiters,less_than ,NULL);
+    list_remove(e);
+    thread_unblock (list_entry(e,struct thread, elem));*/
+  }
   sema->value++;
   intr_set_level (old_level);
 }
@@ -200,14 +204,14 @@ lock_acquire (struct lock *lock)
   if(!success)
   {
     thread_current()->obstacle_thread = lock->holder;
-    donate_priority(thread_current());
+    if(!thread_mlfqs)
+      donate_priority(thread_current());
     sema_down (&lock->semaphore);
     lock->holder = thread_current ();
     
-  }else{
-    thread_current()->number_of_locks++;
-    thread_current()->obstacle_thread = NULL;
   }
+  thread_current()->number_of_locks++;
+  thread_current()->obstacle_thread = NULL;
 
 }
 
@@ -242,17 +246,10 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
   thread_current()->number_of_locks--;
-  if(!thread_mlfqs){
-    if(thread_current()->number_of_locks == 0)
-    {
-      stack_clear(&thread_current()->priority_stack);
-    }
-    else
-    {
-      stack_pop(&thread_current()->priority_stack);
-    }  
-  }
   lock->holder = NULL;
+  if(!thread_mlfqs){
+    restore_priority(thread_current(),&(lock->semaphore).waiters); 
+  }
   sema_up (&lock->semaphore);
 }
 

@@ -523,9 +523,18 @@ list_min (struct list *list, list_less_func *less, void *aux)
   return min;
 }
 
+
+void list_clear(struct list * list){
+
+  list_init(list);
+}
+
+
 ///////
 
 
+
+/*
 
 void  stack_init (struct stack *stack)
 {
@@ -537,21 +546,32 @@ void  stack_init (struct stack *stack)
 }
 
 
-static inline bool stack_is_tail (struct stack_elem *elem)
+
+static inline bool is_stack_head (struct stack_elem *elem)
 {
-    return elem != NULL && elem->prev != NULL && elem->next == NULL;
+    return elem != NULL && elem->prev == NULL && elem->next != NULL;
 }
 
-
-static inline bool stack_is_interior (struct stack_elem *elem)
+static inline bool is_stack_interior (struct stack_elem *elem)
 {
     return elem != NULL && elem->prev != NULL && elem->next != NULL;
+}
+
+static inline bool is_stack_tail (struct stack_elem *elem)
+{
+    return elem != NULL && elem->prev != NULL && elem->next == NULL;
 }
 
 struct stack_elem *stack_begin (struct stack *stack)
 {
     ASSERT (stack != NULL);
     return stack->head.next;
+}
+
+struct stack_elem *stack_next (struct stack_elem *elem)
+{
+  ASSERT (is_stack_head (elem) || is_stack_interior (elem));
+  return elem->next;
 }
 
 
@@ -561,9 +581,21 @@ struct stack_elem *stack_end (struct stack *stack)
     return &stack->tail;
 }
 
+struct stack_elem * stack_head (struct stack *stack) 
+{
+  ASSERT (stack != NULL);
+  return &stack->head;
+}
+
+struct stack_elem * stack_tail (struct stack *stack) 
+{
+  ASSERT (stack != NULL);
+  return &stack->tail;
+}
+
 void stack_insert (struct stack_elem *before, struct stack_elem *elem)
 {
-    ASSERT (stack_is_interior (before) || stack_is_tail (before));
+    ASSERT (is_stack_interior (before) || is_stack_tail (before));
     ASSERT (elem != NULL);
 
     elem->prev = before->prev;
@@ -579,7 +611,7 @@ void stack_push(struct stack *stack, struct stack_elem *elem)
 
 struct stack_elem *stack_remove (struct stack_elem *elem)
 {
-    ASSERT (stack_is_interior (elem));
+    ASSERT (is_stack_interior (elem));
     elem->prev->next = elem->next;
     elem->next->prev = elem->prev;
     return elem->next;
@@ -608,3 +640,4 @@ void stack_clear(struct stack * stack)
 {
     stack_init(stack);
 }
+*/
