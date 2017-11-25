@@ -28,7 +28,7 @@ real mul(real x, real y){
 }
 real div(real x, real y){
 	real result;
-	result.value = x.value/y.value*power(2,14);
+	result.value = x.value/(y.value/power(2,14));
 	return result;
 }
 

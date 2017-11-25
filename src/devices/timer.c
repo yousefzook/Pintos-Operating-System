@@ -173,8 +173,10 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
 
-  if(timer_ticks () % TIMER_FREQ == 0)
+  if(timer_ticks () % TIMER_FREQ == 0){
     update_load_avg();
+    update_recent_cpu_for_all();
+  }
 
   thread_tick ();
 }

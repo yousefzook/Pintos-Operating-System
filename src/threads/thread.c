@@ -83,6 +83,7 @@ int thread_get_load_avg(void);
 int thread_get_nice(void);
 void update_recent_cpu_for_all(void);
 void update_recent_cpu(struct thread *);
+bool is_second = false;
 
 /* Initializes the threading system by transforming the code
    that's currently running into a thread.  This can't work in
@@ -150,9 +151,14 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  lock_acquire (&thread_recent_cpu_lock);
-  t->recent_cpu.value++ ; // every tick increase the running thread recent_cpu.
-  lock_release (&thread_recent_cpu_lock);
+  // lock_acquire (&thread_recent_cpu_lock);
+  if(is_second){
+    t->recent_cpu.value += 2 ;
+    is_second = false;
+  }
+  else
+    t->recent_cpu.value++ ; 
+ // lock_release (&thread_recent_cpu_lock);
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE){
@@ -337,8 +343,11 @@ thread_yield (void)
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
-  if (cur != idle_thread) 
+  if (cur != idle_thread) {
+    // printf("Thread Yields.............\n");
     list_push_back (&ready_list, &cur->elem);
+    // printf("%d**********************************\n", list_size(&ready_list));
+  }
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -628,7 +637,7 @@ static struct thread * BSD_next_thread (void)
       next_running_thread = t;
     }
    }
-  return next_running_thread;
+  return list_entry (list_remove(&next_running_thread->elem), struct thread, elem);
 }
 
 /* Update priority for all ready threads.
@@ -659,9 +668,10 @@ void update_recent_cpu_for_all(void)
     struct thread *t = list_entry (e, struct thread, allelem);
     update_recent_cpu(t);
   }
-  lock_acquire(&thread_recent_cpu_lock);
-  update_recent_cpu(thread_current());
-  lock_release(&thread_recent_cpu_lock);
+
+  // lock_acquire(&thread_recent_cpu_lock);
+  // update_recent_cpu(thread_current());
+  // lock_release(&thread_recent_cpu_lock);
 }
 
 void update_recent_cpu(struct thread * t)
@@ -682,14 +692,22 @@ void update_recent_cpu(struct thread * t)
    load_avg = (59/60)*load_avg + (1/60)*# of ready_threads*/
 void update_load_avg(void)
 {
+  printf("load_avg before: %d\n", load_avg);
+  is_second = true;
   real sixty_real = int_to_real(60);
-  real fifty_nine_real = int_to_real(50);
+  real fifty_nine_real = int_to_real(59);
+  printf("60_real: %d\n", sixty_real.value);
+  printf("59_real: %d\n", fifty_nine_real.value);
 
   int ready_threads_number = list_size(&ready_list);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
   real temp1 = div(mul(fifty_nine_real, load_avg), sixty_real);
   real temp2 = div(ready_threads_number_real, sixty_real);
+  printf("(59/60)*load_avg: %d\n", temp1.value);
+  printf("# of ready_threads: %d\n", ready_threads_number);
 
   load_avg = add(temp1, temp2);
+  printf("load_avg after: %d\n", load_avg);
+
 }
