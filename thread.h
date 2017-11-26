@@ -147,12 +147,17 @@ bool less_than (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux);
 
+/* this function causes preemption if the high-priority 
+   thread containing ELEM should preempt the current
+   thread ,then it returns true . it returns false otherwise */
+bool check_preemption(struct list_elem *);
+
 /* priority inheritance donation function
    for dynamic scheduling
 */
-void donate_priority(struct thread * t);
+void donate_priority(struct thread *);
 
-void restore_priority(struct thread * thread,struct list * list);
+void restore_priority(struct thread *,struct list *);
 
 
 #endif /* threads/thread.h */

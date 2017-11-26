@@ -103,7 +103,7 @@ timer_sleep (int64_t ticks)
     	enum intr_level old_level;
     	old_level = intr_disable();
     	thread_current()->sleep_elem.value = ticks;
-    	list_push_front(&sleepers,&thread_current()->sleep_elem);
+    	list_push_back(&sleepers,&thread_current()->sleep_elem);
     	thread_block(); 
     	intr_set_level (old_level);
     	
