@@ -76,6 +76,8 @@ static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
 
+static struct thread *priority_scheduler(void);
+static inline struct list_elem * get_max(void);
 static struct thread * BSD_next_thread(void);
 void update_priority_for_all_ready_threads(void);
 int thread_get_recent_cpu(void);
@@ -252,7 +254,7 @@ thread_block (void)
   ASSERT (!intr_context ());
   ASSERT (intr_get_level () == INTR_OFF);
 
-  thread_current ()->status = THREAD_BLOCKED;
+  thread_current()->status = THREAD_BLOCKED;
   schedule ();
 }
 
@@ -273,7 +275,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  list_push_front (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -344,7 +346,7 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) {
-    // printf("Thread Yields.............\n");
+    // printf("Thread %d Yields.............\n", thread_tid());
     list_push_back (&ready_list, &cur->elem);
     // printf("%d**********************************\n", list_size(&ready_list));
   }
@@ -402,8 +404,9 @@ thread_get_nice (void)
 int
 thread_get_load_avg (void) 
 {
-  int int_load_avg = real_to_int(load_avg);
-  return int_load_avg*100;
+  real temp = int_to_real(100);
+  int int_load_avg = real_to_int(mul(load_avg, temp));
+  return int_load_avg;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -524,15 +527,21 @@ alloc_frame (struct thread *t, size_t size)
 static struct thread *
 next_thread_to_run (void) 
 {
-  if (thread_mlfqs){
+  if (list_empty (&ready_list))
+    return idle_thread;
+  else if(thread_mlfqs)
     return BSD_next_thread();
-  }
-  else{
-    if (list_empty (&ready_list))
-      return idle_thread;
-    else
-      return list_entry (list_pop_front (&ready_list), struct thread, elem);
-  }
+  return priority_scheduler();
+}
+
+/* returns the highest priority thread */
+static struct thread *priority_scheduler(){
+
+  /* return max priority and remove it from the ready list*/
+  struct list_elem *elem = get_max();
+  list_remove(elem);
+  return list_entry(elem, struct thread, elem);
+
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -628,6 +637,8 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 static struct thread * BSD_next_thread (void) 
 {
   int current_max_priority = 0;
+  if(list_empty(&ready_list))
+    return idle_thread;
   struct thread *next_running_thread = NULL;
   struct list_elem *e;
   for (e = list_end (&ready_list); e != list_begin (&ready_list); e = list_prev (e)){
@@ -688,26 +699,42 @@ void update_recent_cpu(struct thread * t)
 }
 
 
-/* Update load average every minute.
+/* Update load average every second.
    load_avg = (59/60)*load_avg + (1/60)*# of ready_threads*/
 void update_load_avg(void)
 {
-  // printf("load_avg before: %d\n", load_avg);
   is_second = true;
   real sixty_real = int_to_real(60);
-  real fifty_nine_real = int_to_real(59);
-  // printf("60_real: %d\n", sixty_real.value);
-  // printf("59_real: %d\n", fifty_nine_real.value);
+  real fifty_nine_real = int_to_real(59); 
 
+  // int ready_threads_number = 1;
   int ready_threads_number = list_size(&ready_list);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
-  real temp1 = div(mul(fifty_nine_real, load_avg), sixty_real);
+  real temp1 = div(mul(load_avg, fifty_nine_real), sixty_real);
   real temp2 = div(ready_threads_number_real, sixty_real);
-  // printf("(59/60)*load_avg: %d\n", temp1.value);
+  // printf("load-avg= %d ,, temp1: %u ,, temp2: %d , #ready_threads= %d\n", thread_get_load_avg(), temp1.value, temp2.value, ready_threads_number);
+  // printf("(59/60)*load_avg: %d , temp2: %d\n", temp1.value, temp2.value);
   // printf("# of ready_threads: %d\n", ready_threads_number);
 
   load_avg = add(temp1, temp2);
-  // printf("load_avg after: %d\n", load_avg);
+  // printf("load_avg real value after: %d\n", load_avg.value);
+  // printf("load_avg from thread_get_load_avg: %d\n", thread_get_load_avg());
 
+}
+
+bool less_than (const struct list_elem *a,
+                             const struct list_elem *b,
+                             void *aux UNUSED)
+{
+  int p_1 = list_entry(a,struct thread,elem)->priority;
+  int p_2 = list_entry(b,struct thread,elem)->priority;
+  if(p_1 < p_2)
+    return true;
+  return false;
+}
+
+static inline struct list_elem* get_max(){
+
+  return list_max(&ready_list,less_than ,NULL);
 }

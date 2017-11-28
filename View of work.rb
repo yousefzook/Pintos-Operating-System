@@ -127,3 +127,7 @@ need to check mlfqs # yes we need to check it
 Nada >> priority , synchronization
 Y Ahmed >> priority donation , timer
 Y Zook >> BSD , mlfqs , real , git
+
+------------------
+ready queue size if 1 thread
+assert thread_mlfqs

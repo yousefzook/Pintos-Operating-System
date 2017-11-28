@@ -78,17 +78,17 @@ int
 main (void)
 {
 
-  printf("Hello World!\n");
-  int int1 = 64, int2 = 64;
-  real real1 = int_to_real(int1), real2=int_to_real(int2);
-  printf("add 64 + 64 in real: %i\n", add(real1, real2).value );
-  printf("sub 64 + 64 in real: %i\n", sub(real1, real2).value );
-  printf("mul 64 + 64 in real: %i\n", mul(real1, real2).value );
-  printf("div 64 + 64 in real: %i\n-------------\n", div(real1, real2).value );
-  printf("add 64 + 64 in int: %i\n", real_to_int(add(real1, real2)) );
-  printf("sub 64 + 64 in int: %i\n", real_to_int(sub(real1, real2)) );
-  printf("mul 64 + 64 in int: %i\n", real_to_int(mul(real1, real2)) );
-  printf("div 64 + 64 in int: %i\n-------------\n", real_to_int(div(real1, real2)) );
+  // printf("Hello World!\n");
+  // int int1 = 64, int2 = 64;
+  // real real1 = int_to_real(int1), real2=int_to_real(int2);
+  // printf("add 64 + 64 in real: %i\n", add(real1, real2).value );
+  // printf("sub 64 + 64 in real: %i\n", sub(real1, real2).value );
+  // printf("mul 64 + 64 in real: %i\n", mul(real1, real2).value );
+  // printf("div 64 + 64 in real: %i\n-------------\n", div(real1, real2).value );
+  // printf("add 64 + 64 in int: %i\n", real_to_int(add(real1, real2)) );
+  // printf("sub 64 + 64 in int: %i\n", real_to_int(sub(real1, real2)) );
+  // printf("mul 64 + 64 in int: %i\n", real_to_int(mul(real1, real2)) );
+  // printf("div 64 + 64 in int: %i\n-------------\n", real_to_int(div(real1, real2)) );
 
   char **argv;
 
