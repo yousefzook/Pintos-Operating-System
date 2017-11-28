@@ -30,8 +30,10 @@
 #include <stdio.h>
 #include <string.h>
 #include "threads/interrupt.h"
-#include "tests/threads/tests.h"
-//#include "threads/thread.h"
+
+/* list_less_function*/
+list_less_func * less = less_than;
+
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -100,16 +102,6 @@ sema_try_down (struct semaphore *sema)
   intr_set_level (old_level);
 
   return success;
-}
-
-
-bool less (const struct list_elem *a, const struct list_elem *b,void *aux UNUSED)
-{
-  int p_1 = list_entry(a,struct thread,elem)->priority;
-  int p_2 = list_entry(b,struct thread,elem)->priority;
-  if(p_1 < p_2)
-    return true;
-  return false;
 }
 
 /* Up or "V" operation on a semaphore.  Increments SEMA's value
@@ -217,7 +209,7 @@ lock_acquire (struct lock *lock)
   success = lock_try_acquire(lock);
   if(!success)
   {
-    thread_current()->obstacle_thread = lock->holder;
+    thread_current()->obstacle_thread = &lock->holder;
     if(!thread_mlfqs)
       donate_priority(thread_current());
     sema_down (&lock->semaphore);

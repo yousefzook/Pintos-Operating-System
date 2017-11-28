@@ -90,7 +90,7 @@ struct thread
     int number_of_locks;                /* number of locks that the thread acquires */
     int priority;                       /* Priority. */
     struct list priority_list;       /* stack of past priorities inherited */
-    struct thread* obstacle_thread;     /* the obstacling thread that this thread is waiting for */
+    struct thread **obstacle_thread;     /* the obstacling thread that this thread is waiting for */
 
     struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */

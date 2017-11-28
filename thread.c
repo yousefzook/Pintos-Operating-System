@@ -619,8 +619,8 @@ bool less_than (const struct list_elem *a,
                              const struct list_elem *b,
                              void *aux UNUSED)
 {
-  int p_1 = list_entry(a,struct thread,elem)->priority;
-  int p_2 = list_entry(b,struct thread,elem)->priority;
+  int p_1 = get_last_priority(list_entry(a,struct thread,elem));
+  int p_2 = get_last_priority(list_entry(b,struct thread,elem));
   if(p_1 < p_2)
     return true;
   return false;
@@ -648,34 +648,42 @@ bool check_preemption(struct list_elem * e){
   return false;
 }
 
+
 void donate_priority(struct thread * new_thread)
 {
   if(new_thread == NULL)
     return;
   struct thread * temp = new_thread;
-  struct thread * obs = temp->obstacle_thread;
-  while(obs != NULL)
+  while(temp->obstacle_thread != NULL)
   {
+  	struct thread * obs = *temp->obstacle_thread;
     if(get_last_priority(temp) >= get_last_priority(obs))
     {
-      // handle donation... 
+      // create new elemetn of donation and add it to waiters stack 
       struct list_elem *elem = malloc(sizeof(struct list_elem));
-      //struct list_elem elem;
-      elem->value = temp->priority;
-      list_push_front(&obs->priority_list,elem);
+      elem->value = get_last_priority(temp);
+      msg("thread %d of %d  donated to %d of %d ",temp->tid,get_last_priority(temp),obs->tid,get_last_priority(obs));
+      list_push_front(&obs->priority_list,elem); 
+      snprintf(c,sizeof c,"no next , count is %d",count);
       temp = obs;
-      obs = temp->obstacle_thread;
+      if(temp->obstacle_thread == NULL)
+         msg("nonext");
+      else
+      	msg("fe next");
+      	
     }
     else
       return;
   }
 }
 
+
 void restore_priority(struct thread * t,struct list * list)
 {
   if(list_empty(&t->priority_list) || list_empty(list))
     return;
   if(t->number_of_locks == 0){
+  	  //msg("list_clear...................");
       list_clear(&t->priority_list);
   }else
    {
@@ -684,9 +692,11 @@ void restore_priority(struct thread * t,struct list * list)
     struct list * l = &t->priority_list;
     struct list_elem *e;  
     for (e = list_begin (l); e != list_end (l); e = list_next (e))
-      if(e->value == released->priority) 
-       return;
-    list_remove(e);
+      if(e->value == get_last_priority(released))
+      {
+      	list_remove_and_free(e);
+      	return;
+      } 
    } 
 }
 

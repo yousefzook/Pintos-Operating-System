@@ -179,6 +179,7 @@ void list_unique (struct list *, struct list *duplicates,
 struct list_elem *list_max (struct list *, list_less_func *, void *aux);
 struct list_elem *list_min (struct list *, list_less_func *, void *aux);
 
+void list_remove_and_free(struct list_elem *elem);
 void list_clear(struct list *);
 
 /*
