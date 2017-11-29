@@ -112,7 +112,7 @@ test_mlfqs_recent_1 (void)
   int64_t start_time;
   int last_elapsed = 0;
   
-  ASSERT (thread_mlfqs);
+  ASSERT (true);
 
   do 
     {

@@ -1,5 +1,6 @@
 #include "list.h"
 #include "../debug.h"
+#include "threads/malloc.h"
 
 /* Our doubly linked lists have two header elements: the "head"
    just before the first element and the "tail" just after the
@@ -508,11 +509,20 @@ list_min (struct list *list, list_less_func *less, void *aux)
 }
 
 
-void list_clear(struct list * list){
-
-  list_init(list);
+void list_remove_and_free(struct list_elem *elem)
+{
+    list_remove(elem);
+    free(elem);
 }
-
+void list_clear(struct list * list)
+{
+  struct list_elem *e;  
+  for (e = list_begin (list); e != list_end (list);){
+      struct list_elem *next = list_next(e);
+      list_remove_and_free(e);
+      e = next;
+  }
+}
 
 ///////
 

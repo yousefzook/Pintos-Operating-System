@@ -103,7 +103,7 @@ timer_sleep (int64_t ticks)
     old_level = intr_disable();
     struct thread * running_thread = thread_current();
     running_thread->sleep_elem.value = ticks;
-    list_push_back(&sleepers,&running_thread->sleep_elem);
+    list_push_front(&sleepers,&running_thread->sleep_elem);
     thread_block(); 
     intr_set_level (old_level);
   }
