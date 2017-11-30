@@ -4,7 +4,6 @@
 #include <random.h>
 #include <stdio.h>
 #include <string.h>
-#include "threads/malloc.h"
 #include "threads/flags.h"
 #include "threads/interrupt.h"
 #include "threads/intr-stubs.h"
@@ -12,7 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
-#include "tests/threads/tests.h"
+#include "threads/priority_scheduler.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -74,24 +73,11 @@ static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
 void thread_schedule_tail (struct thread *prev);
 static tid_t allocate_tid (void);
-/// scheduler mechanisms
-static struct thread *priority_scheduler(void);
-
-/* return the most recent priority */
-static inline int get_last_priority(struct thread * t);
-
-/* returns the max element from ready list */
-static inline struct list_elem * get_max(void);
-
-/* Get next to run thread using BSD scheduler*/
-static struct thread * BSD_next_thread(void);
 
 /* These functions to maintain dynamic pririty to use in BSD. */
-void update_priority_for_all_ready_threads(void);
 int thread_get_recent_cpu(void);
 int thread_get_load_avg(void);
 int thread_get_nice(void);
-void update_recent_cpu_for_all(void);
 void update_recent_cpu(struct thread *);
 bool is_second = false;
 
@@ -113,6 +99,7 @@ thread_init (void)
   lock_init (&tid_lock);
   list_init (&ready_list);
   list_init (&all_list);
+  init_priority_scheduler();
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -155,12 +142,14 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if(is_second){
-    t->recent_cpu.value += 2 ;
-    is_second = false;
+  if(is_mlfqs()){
+    if(is_second){
+      t->recent_cpu.value += 2 ;
+      is_second = false;
+    }
+    else
+      t->recent_cpu.value++ ; 
   }
-  else
-    t->recent_cpu.value++ ; 
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -234,7 +223,7 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
-  check_preemption(&t->elem);
+  check_preemption();
 
   return tid;
 }
@@ -269,7 +258,7 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_front (&ready_list, &t->elem);
+  list_push_back (&ready_list, &t->elem);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -373,8 +362,7 @@ thread_set_priority (int new_priority)
     return;
   }
   cur->priority = new_priority;
-  if(!list_empty(&ready_list))
-    check_preemption(get_max());
+  check_preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -499,6 +487,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   t->number_of_locks = 0;
+  t->obstacle_thread = NULL;
   list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
 }
@@ -526,19 +515,7 @@ next_thread_to_run (void)
 {
   if (list_empty (&ready_list))
     return idle_thread;
-  else if(thread_mlfqs)
-    return BSD_next_thread();
   return priority_scheduler();
-}
-
-/* returns the highest priority thread */
-static struct thread *priority_scheduler(){
-
-  /* return max priority and remove it from the ready list*/
-  struct list_elem *elem = get_max();
-  list_remove(elem);
-  return list_entry(elem, struct thread, elem);
-
 }
 
 /* Completes a thread switch by activating the new thread's page
@@ -624,24 +601,6 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-/* find next running thread in case of using BSD schedular.
-   loop in ready list and return the first thread with maximum priority. */
-static struct thread * BSD_next_thread (void) 
-{
-  int current_max_priority = 0;
-  if(list_empty(&ready_list))
-    return idle_thread;
-  struct thread *next_running_thread = NULL;
-  struct list_elem *e;
-  for (e = list_end (&ready_list); e != list_begin (&ready_list); e = list_prev (e)){
-    struct thread *t = list_entry (e, struct thread, allelem);
-    if(t->priority >= current_max_priority){
-      current_max_priority = t->priority;
-      next_running_thread = t;
-    }
-   }
-  return list_entry (list_remove(&next_running_thread->elem), struct thread, elem);
-}
 
 /* Update priority for all ready threads.
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
@@ -696,13 +655,13 @@ void update_load_avg(void)
   real fifty_nine_real = int_to_real(59); 
 
   int ready_threads_number = list_size(&ready_list);
+  // printf("# of ready_threads: %d\n", ready_threads_number);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
   real temp1 = div(mul(load_avg, fifty_nine_real), sixty_real);
   real temp2 = div(ready_threads_number_real, sixty_real);
   // printf("load-avg= %d ,, temp1: %u ,, temp2: %d , #ready_threads= %d\n", thread_get_load_avg(), temp1.value, temp2.value, ready_threads_number);
   // printf("(59/60)*load_avg: %d , temp2: %d\n", temp1.value, temp2.value);
-  // printf("# of ready_threads: %d\n", ready_threads_number);
 
   load_avg = add(temp1, temp2);
   // printf("load_avg real value after: %d\n", load_avg.value);
@@ -710,90 +669,10 @@ void update_load_avg(void)
 
 }
 
-/* Compares the value of two list elements A and B, given
-   auxiliary data AUX.  Returns true if A is less than B, or
-   false if A is greater than or equal to B. */
-
-bool less_than (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux UNUSED)
-{
-  int p_1 = get_last_priority(list_entry(a,struct thread,elem));
-  int p_2 = get_last_priority(list_entry(b,struct thread,elem));
-  if(p_1 < p_2)
-    return true;
-  return false;
+const struct list *get_ready_list(){
+  return &ready_list;
 }
 
-static inline struct list_elem* get_max(){
-
-  return list_max(&ready_list,less_than ,NULL);
-}
-
-static inline int get_last_priority(struct thread * t)
-{
-  return list_empty(&t->priority_list) ? t->priority : list_begin(&t->priority_list)->value;
-}
-
-bool check_preemption(struct list_elem * e){
-  struct thread* cur = thread_current();
-  struct thread* new_thread = list_entry(e,
-                     struct thread, elem);
-  //msg("new priority:%d ,current: %d ",get_last_priority(new_thread),get_last_priority(cur));
-  if(get_last_priority(new_thread) > get_last_priority(cur)){
-    thread_yield();
-    return true;
-  }
-  return false;
-}
-
-
-void donate_priority(struct thread * new_thread)
-{
-  if(new_thread == NULL)
-    return;
-  struct thread * temp = new_thread;
-  while(temp->obstacle_thread != NULL)
-  {
-    struct thread * obs = *temp->obstacle_thread;
-    if(get_last_priority(temp) >= get_last_priority(obs))
-    {
-      // create new elemetn of donation and add it to waiters stack 
-      struct list_elem *elem = malloc(sizeof(struct list_elem));
-      elem->value = get_last_priority(temp);
-      msg("thread %d of %d  donated to %d of %d ",temp->tid,get_last_priority(temp),obs->tid,get_last_priority(obs));
-      list_push_front(&obs->priority_list,elem); 
-      temp = obs;
-      if(temp->obstacle_thread == NULL)
-         msg("nonext");
-      else
-        msg("fe next");
-        
-    }
-    else
-      return;
-  }
-}
-
-
-void restore_priority(struct thread * t,struct list * list)
-{
-  if(list_empty(&t->priority_list) || list_empty(list))
-    return;
-  if(t->number_of_locks == 0){
-      //msg("list_clear...................");
-      list_clear(&t->priority_list);
-  }else
-   {
-    struct thread *released = list_entry (list_max(list,less_than ,NULL),
-                                struct thread, elem);
-    struct list * l = &t->priority_list;
-    struct list_elem *e;  
-    for (e = list_begin (l); e != list_end (l); e = list_next (e))
-      if(e->value == get_last_priority(released))
-      {
-        list_remove_and_free(e);
-        return;
-      } 
-   } 
+bool is_mlfqs(){
+  return thread_mlfqs;
 }

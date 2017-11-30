@@ -7,19 +7,25 @@
    last element.  The `prev' link of the front header is null, as
    is the `next' link of the back header.  Their other two links
    point toward each other via the interior elements of the list.
+
    An empty list looks like this:
+
                       +------+     +------+
                   <---| head |<--->| tail |--->
                       +------+     +------+
+
    A list with two elements in it looks like this:
+
         +------+     +-------+     +-------+     +------+
     <---| head |<--->|   1   |<--->|   2   |<--->| tail |<--->
         +------+     +-------+     +-------+     +------+
+
    The symmetry of this arrangement eliminates lots of special
    cases in list processing.  For example, take a look at
    list_remove(): it takes only two pointer assignments and no
    conditionals.  That's a lot simpler than the code would be
    without header elements.
+
    (Because only one of the pointers in each header element is used,
    we could in fact combine them into a single header element
    without sacrificing this simplicity.  But using two separate
@@ -81,6 +87,7 @@ list_next (struct list_elem *elem)
 }
 
 /* Returns LIST's tail.
+
    list_end() is often used in iterating through a list from
    front to back.  See the big comment at the top of list.h for
    an example. */
@@ -111,9 +118,11 @@ list_prev (struct list_elem *elem)
 }
 
 /* Returns LIST's head.
+
    list_rend() is often used in iterating through a list in
    reverse order, from back to front.  Here's typical usage,
    following the example from the top of list.h:
+
       for (e = list_rbegin (&foo_list); e != list_rend (&foo_list);
            e = list_prev (e))
         {
@@ -129,8 +138,10 @@ list_rend (struct list *list)
 }
 
 /* Return's LIST's head.
+
    list_head() can be used for an alternate style of iterating
    through a list, e.g.:
+
       e = list_head (&list);
       while ((e = list_next (e)) != list_end (&list)) 
         {
@@ -211,19 +222,24 @@ list_push_back (struct list *list, struct list_elem *elem)
 
 /* Removes ELEM from its list and returns the element that
    followed it.  Undefined behavior if ELEM is not in a list.
+
    A list element must be treated very carefully after removing
    it from its list.  Calling list_next() or list_prev() on ELEM
    will return the item that was previously before or after ELEM,
    but, e.g., list_prev(list_next(ELEM)) is no longer ELEM!
+
    The list_remove() return value provides a convenient way to
    iterate and remove elements from a list:
+
    for (e = list_begin (&list); e != list_end (&list); e = list_remove (e))
      {
        ...do something with e...
      }
+
    If you need to free() elements of the list then you need to be
    more conservative.  Here's an alternate strategy that works
    even in that case:
+
    while (!list_empty (&list))
      {
        struct list_elem *e = list_pop_front (&list);
@@ -481,7 +497,6 @@ list_max (struct list *list, list_less_func *less, void *aux)
   if (max != list_end (list)) 
     {
       struct list_elem *e;
-      
       for (e = list_next (max); e != list_end (list); e = list_next (e))
         if (less (max, e, aux))
           max = e; 
@@ -514,6 +529,7 @@ void list_remove_and_free(struct list_elem *elem)
     list_remove(elem);
     free(elem);
 }
+
 void list_clear(struct list * list)
 {
   struct list_elem *e;  
@@ -523,94 +539,3 @@ void list_clear(struct list * list)
       e = next;
   }
 }
-
-///////
-
-
-
-/*
-void  stack_init (struct stack *stack)
-{
-    ASSERT (stack != NULL);
-    stack->head.prev = NULL;
-    stack->head.next = &stack->tail;
-    stack->tail.prev = &stack->head;
-    stack->tail.next = NULL;
-}
-static inline bool is_stack_head (struct stack_elem *elem)
-{
-    return elem != NULL && elem->prev == NULL && elem->next != NULL;
-}
-static inline bool is_stack_interior (struct stack_elem *elem)
-{
-    return elem != NULL && elem->prev != NULL && elem->next != NULL;
-}
-static inline bool is_stack_tail (struct stack_elem *elem)
-{
-    return elem != NULL && elem->prev != NULL && elem->next == NULL;
-}
-struct stack_elem *stack_begin (struct stack *stack)
-{
-    ASSERT (stack != NULL);
-    return stack->head.next;
-}
-struct stack_elem *stack_next (struct stack_elem *elem)
-{
-  ASSERT (is_stack_head (elem) || is_stack_interior (elem));
-  return elem->next;
-}
-struct stack_elem *stack_end (struct stack *stack)
-{
-    ASSERT (stack != NULL);
-    return &stack->tail;
-}
-struct stack_elem * stack_head (struct stack *stack) 
-{
-  ASSERT (stack != NULL);
-  return &stack->head;
-}
-struct stack_elem * stack_tail (struct stack *stack) 
-{
-  ASSERT (stack != NULL);
-  return &stack->tail;
-}
-void stack_insert (struct stack_elem *before, struct stack_elem *elem)
-{
-    ASSERT (is_stack_interior (before) || is_stack_tail (before));
-    ASSERT (elem != NULL);
-    elem->prev = before->prev;
-    elem->next = before;
-    before->prev->next = elem;
-    before->prev = elem;
-}
-void stack_push(struct stack *stack, struct stack_elem *elem)
-{
-    stack_insert (stack_begin (stack), elem);
-}
-struct stack_elem *stack_remove (struct stack_elem *elem)
-{
-    ASSERT (is_stack_interior (elem));
-    elem->prev->next = elem->next;
-    elem->next->prev = elem->prev;
-    return elem->next;
-}
-struct stack_elem *stack_pop (struct stack *stack)
-{
-    struct stack_elem *top =  stack_top(stack);
-    stack_remove (top);
-    return top;
-}
-struct stack_elem *stack_top (struct stack *stack)
-{
-    ASSERT (!stack_isEmpty (stack));
-    return stack->head.next;
-}
-bool stack_isEmpty (struct stack *stack)
-{
-    return stack_begin (stack) == stack_end (stack);
-}
-void stack_clear(struct stack * stack)
-{
-    stack_init(stack);
-}
-*/  

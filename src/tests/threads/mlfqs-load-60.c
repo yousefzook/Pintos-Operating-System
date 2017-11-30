@@ -136,6 +136,7 @@ test_mlfqs_load_60 (void)
       printf("sleep_until: %d", sleep_until);
       printf("  ,,  timer_ticks: %d\n", timer_ticks());
       timer_sleep (sleep_until - timer_ticks ());
+      printf("main is woken now !!!!\n");
       load_avg = thread_get_load_avg ();
       msg ("After %d seconds, load average=%d.%02d.",
            i * 2, load_avg / 100, load_avg % 100);

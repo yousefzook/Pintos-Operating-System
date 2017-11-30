@@ -85,12 +85,11 @@ struct thread
     int number_of_locks;                /* number of locks that the thread acquires */
     int priority;                       /* Priority. */
     struct list priority_list;       /* stack of past priorities inherited */
-    struct thread **obstacle_thread;     /* the obstacling thread that this thread is waiting for */
+    struct thread ** obstacle_thread;     /* the obstacling thread that this thread is waiting for */
 
     struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    struct list_elem sleep_elem;        /* sleep element */
 
     int nice;                           /* Niceness of a thread. */
     real recent_cpu;                    /* An estimate of the CPU time the thread has used recently. */
@@ -142,21 +141,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-bool less_than (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux);
+const struct list *get_ready_list(void);
 
-/* this function causes preemption if the high-priority 
-   thread containing ELEM should preempt the current
-   thread ,then it returns true . it returns false otherwise */
-bool check_preemption(struct list_elem *);
-
-/* priority inheritance donation function
-   for dynamic scheduling
-*/
-void donate_priority(struct thread *);
-
-void restore_priority(struct thread *,struct list *);
-
+void update_priority_for_all_ready_threads(void);
+void update_recent_cpu_for_all(void);
+bool is_mlfqs(void);
 
 #endif /* threads/thread.h */
