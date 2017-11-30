@@ -294,7 +294,8 @@ wake_up_sleepers()
           thread_unblock(s->t);
           e = list_next(e);
           list_pop_front(&sleepers);
-          if(s->t->priority > thread_current()->priority){
+          int cur_pr = get_last_priority(thread_current());
+          if(get_last_priority(s->t) > cur_pr){
             preemption = true;
           }
         }else
