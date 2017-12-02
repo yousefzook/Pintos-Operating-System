@@ -206,9 +206,8 @@ timer_interrupt (struct intr_frame *args UNUSED)
     update_load_avg();
     update_recent_cpu_for_all();
   }
-  // if(is_mlfqs() && timer_ticks () % 4 == 0){
-  //   update_priority_for_all_ready_threads();
-  // }
+  if(is_mlfqs() && timer_ticks () % 4 == 0)
+    update_priority_for_all_ready_threads();
   thread_tick ();
 }
 

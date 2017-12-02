@@ -488,6 +488,8 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->number_of_locks = 0;
   t->obstacle_thread = NULL;
+  t->nice = 0;
+  t->recent_cpu.value = 0;
   list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
 }
@@ -606,30 +608,28 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void update_priority_for_all_ready_threads(void)
 {  
-  struct list_elem *e;
-  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e)){
-    struct thread *t = list_entry (e, struct thread, allelem);
-    real new_priority;
-
-    real recent_cpu_over_4 = div(t->recent_cpu , int_to_real(4));
-    real PRI_MAX_real = int_to_real(PRI_MAX);
-    real double_nice_real = mul(int_to_real(t->nice), int_to_real(2));
-
-    new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
-    t->priority = real_to_int(new_priority);
-  } 
+  // struct list_elem * e;
+  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){
+  //   struct thread *t = list_entry (e, struct thread, elem);
+  //   real new_priority;
+  //   real recent_cpu_over_4 = div(t->recent_cpu , int_to_real(4));
+  //   real PRI_MAX_real = int_to_real(PRI_MAX);
+  //   real double_nice_real = mul(int_to_real(t->nice), int_to_real(2));
+  //   new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
+  //   t->priority = real_to_int(new_priority);
+  // } 
 }
 
 /* Update recent_cpu value for all threads including runnig thread.
    recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
 void update_recent_cpu_for_all(void)
 {
-  struct list_elem *e;
-  for (e = list_begin (&ready_list); e != list_end (&ready_list); e = list_next (e))
-  {
-    struct thread *t = list_entry (e, struct thread, allelem);
-    update_recent_cpu(t);
-  }
+  // struct list_elem *e;
+  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
+  // {
+  //   struct thread *t = list_entry (e, struct thread, elem);
+  //   update_recent_cpu(t);
+  // }
 }
 
 void update_recent_cpu(struct thread * t)
@@ -643,6 +643,7 @@ void update_recent_cpu(struct thread * t)
   // la*2 / la*2+1 * recent_cpu + nice
   recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
   t->recent_cpu = recent_cpu_real;
+  // printf("recent_cpu after: %d\n", real_to_int(recent_cpu_real));
 }
 
 
@@ -655,6 +656,9 @@ void update_load_avg(void)
   real fifty_nine_real = int_to_real(59); 
 
   int ready_threads_number = list_size(&ready_list);
+  if(running_thread() != idle_thread)
+    ready_threads_number += 1;
+  
   // printf("# of ready_threads: %d\n", ready_threads_number);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
