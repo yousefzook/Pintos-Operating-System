@@ -110,6 +110,34 @@ Some Fields are added to the struct thread:
 
 struct list priority_list: a List - behaves as a stack - is used to track the priority donation.
 
+	       holds		    waits on
+	A(30) -------> | lock1 |  <+++++++++++ D(50)
+
+			  ^
+			  +
+		waits on  +
+			  +		       	   
+   			  +    holds
+			B(35) -------> | lock2 |
+
+	      				 ^
+					 +
+			      waits on   +
+					 +		       	   
+		   			 +    holds	           
+					C(40) -------> | lock3 |
+
+1) Thread A with priority 30 aquires lock1.
+2) Thread B with priority 35 aquires lock2 and waits on lock1
+3) Thread B donates its priority(35) to A.
+4) Thread C aquires lock3 and waits on lock2
+5) Thread C donates priority 40 to B which donates 40 to A
+6) Thread D is created with priority 50 and tries to aquire lock1
+7) Thread D donates its priority to A.
+
+thread A with priority 60 is run - D aquires lock1 - B with priority 40 aquires lock1 - 
+after B releases lock2 it's back to it's original priority 35 and C aquires lock3.
+
 ---- ALGORITHMS ----
 
 >> B3: How do you ensure that the highest priority thread waiting for
@@ -122,12 +150,21 @@ Locks and Condition variables: they are implemented using semaphores, therefore 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
--picture
+1) check if thread can aquire the lock.
+2) if not and priority schedualing in used perform priority donation.
+3) when manage to aquire the lock.
+	-set lock holder
+	-increment the number_of_threads held by the thread.
+	-set the obstacle_thread = NULL (The thread its waiting for).
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
 
--picture
+1) decrement the number_of_locks held by the thread.
+2) set the lock holder to NULL
+3) if priority schedualing is used, 
+   restore the original priority of the thread before the priority donation
+4) sema_up();
 
 ---- SYNCHRONIZATION ----
 
@@ -135,10 +172,18 @@ Locks and Condition variables: they are implemented using semaphores, therefore 
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
+A thread may change its priorty while being donated the priority from a higher priority thread or
+returning to its original priority after releasing a lock.
+
+Solution: 
+
 ---- RATIONALE ----
 
->> B7: Why did you choose this design?  In what ways is it superior to
+>> B7: Why did you choose this design? In what ways is it superior to
 >> another design you considered?
+
+Using the list provided as a stack was chosen over lots of other alternatives to
+implement priority donation.
 
 			  ADVANCED SCHEDULER
 			  ==================
