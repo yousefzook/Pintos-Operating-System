@@ -143,7 +143,7 @@ int thread_get_load_avg (void);
 
 const struct list *get_ready_list(void);
 
-void update_priority_for_all_ready_threads(void);
+void update_priority_for_all_threads(void);
 void update_recent_cpu_for_all(void);
 bool is_mlfqs(void);
 

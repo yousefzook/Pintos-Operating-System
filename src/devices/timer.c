@@ -195,7 +195,7 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
@@ -207,7 +207,7 @@ timer_interrupt (struct intr_frame *args UNUSED)
     update_recent_cpu_for_all();
   }
   if(is_mlfqs() && timer_ticks () % 4 == 0)
-    update_priority_for_all_ready_threads();
+    update_priority_for_all_threads();
   thread_tick ();
 }
 

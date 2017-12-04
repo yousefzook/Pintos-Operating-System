@@ -143,12 +143,14 @@ thread_tick (void)
     kernel_ticks++;
 
   if(is_mlfqs() && t != idle_thread){
-    if(is_second){
-      t->recent_cpu = add(t->recent_cpu , int_to_real(2)) ;
-      is_second = false;
-    }
-    else
+    // if(is_second){
+    //   t->recent_cpu = sub(t->recent_cpu , int_to_real(2)) ;
+    //   is_second = false;
+    // }
+    // else
       t->recent_cpu = add(t->recent_cpu , int_to_real(1)) ;
+      // printf("load_avg: %d\n", load_avg);
+      // printf("recent_cpu_int: %d\n", real_to_int(t->recent_cpu));
   }
 
   /* Enforce preemption. */
@@ -599,7 +601,7 @@ allocate_tid (void)
 
   return tid;
 }
-
+
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
@@ -607,7 +609,7 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
 /* Update priority for all ready threads.
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
-void update_priority_for_all_ready_threads(void)
+void update_priority_for_all_threads(void)
 {  
   struct list_elem * e;
   for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){
@@ -651,13 +653,15 @@ void update_recent_cpu(struct thread * t)
   real temp1 = mul(load_avg, int_to_real(2)); // la*2
   real temp2 = add(temp1, int_to_real(1)); // la*2+1
   real temp3 = div(temp1, temp2); //la*2 / la*2+1
+  // printf("load_avg:  %d\n", load_avg);
 
   /* la*2 / la*2+1 * recent_cpu + nice */
   recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
   // printf("nice_real: %d\n", nice_real);
+  // printf("nicd_int: %d\n", t->nice);
   // printf("temp1: %d", temp1.value);
   // printf(" ,, temp2: %d", temp2.value);
-  // printf(" ,, temp3: %d", temp3.value);
+  // printf(" ,, temp3: %d\n", temp3.value);
 
   // printf("  thread recent_cpu: %d\n", t->recent_cpu.value);  
   t->recent_cpu = recent_cpu_real;
