@@ -1,10 +1,10 @@
 #include "real.h"
 
 // convert from int to real and viceversa
-unsigned real_to_int(real i){
+int real_to_int(real i){
 	return i.value/power(2,14);
 }
-real int_to_real(unsigned i){
+real int_to_real(int i){
 	real result;
 	result.value = i*power(2,14);
 	return result;
@@ -32,9 +32,9 @@ real div(real x, real y){
 	return result;
 }
 
-unsigned power(unsigned base, unsigned exponent){
-	unsigned i;
-	unsigned result = 1;
+int power(int base, int exponent){
+	int i;
+	int result = 1;
 	for (i = 0; i < exponent; i++){
 		result = base*result;
 	}

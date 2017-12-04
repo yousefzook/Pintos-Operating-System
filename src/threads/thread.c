@@ -67,7 +67,7 @@ static void kernel_thread (thread_func *, void *aux);
 static void idle (void *aux UNUSED);
 static struct thread *running_thread (void);
 static struct thread *next_thread_to_run (void);
-static void init_thread (struct thread *, const char *name, int priority);
+static void init_thread (struct thread *, const char *name, int priority, int nice_by_100);
 static bool is_thread (struct thread *) UNUSED;
 static void *alloc_frame (struct thread *, size_t size);
 static void schedule (void);
@@ -103,7 +103,7 @@ thread_init (void)
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
-  init_thread (initial_thread, "main", PRI_DEFAULT);
+  init_thread (initial_thread, "main", PRI_DEFAULT, 0);
   initial_thread->status = THREAD_RUNNING;
   initial_thread->tid = allocate_tid ();
 }
@@ -142,13 +142,13 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if(is_mlfqs()){
+  if(is_mlfqs() && t != idle_thread){
     if(is_second){
-      t->recent_cpu.value += 2 ;
+      t->recent_cpu = add(t->recent_cpu , int_to_real(2)) ;
       is_second = false;
     }
     else
-      t->recent_cpu.value++ ; 
+      t->recent_cpu = add(t->recent_cpu , int_to_real(1)) ;
   }
 
   /* Enforce preemption. */
@@ -196,7 +196,7 @@ thread_create (const char *name, int priority,
     return TID_ERROR;
 
   /* Initialize thread. */
-  init_thread (t, name, priority);
+  init_thread (t, name, priority,thread_get_nice());
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -399,11 +399,12 @@ thread_get_load_avg (void)
 int
 thread_get_recent_cpu (void) 
 {
-  int int_recent_cpu = real_to_int(thread_current()->recent_cpu);
-  return int_recent_cpu*100;
+  real temp = int_to_real(100);
+  int int_recent_cpu = real_to_int(mul(thread_current()->recent_cpu, temp));
+  return int_recent_cpu;
 }
 
-
+
 /* Idle thread.  Executes when no other thread is ready to run.
    The idle thread is initially put on the ready list by
    thread_start().  It will be scheduled once initially, at which
@@ -474,7 +475,7 @@ is_thread (struct thread *t)
 /* Does basic initialization of T as a blocked thread named
    NAME. */
 static void
-init_thread (struct thread *t, const char *name, int priority)
+init_thread (struct thread *t, const char *name, int priority, int nice_by_100)
 {
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
@@ -488,8 +489,9 @@ init_thread (struct thread *t, const char *name, int priority)
   t->magic = THREAD_MAGIC;
   t->number_of_locks = 0;
   t->obstacle_thread = NULL;
-  t->nice = 0;
-  t->recent_cpu.value = 0;
+  t->nice = nice_by_100/100;
+  printf("nice: %d\n", t->nice);
+  t->recent_cpu = int_to_real(0);
   list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
 }
@@ -608,42 +610,58 @@ uint32_t thread_stack_ofs = offsetof (struct thread, stack);
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void update_priority_for_all_ready_threads(void)
 {  
-  // struct list_elem * e;
-  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){
-  //   struct thread *t = list_entry (e, struct thread, elem);
-  //   real new_priority;
-  //   real recent_cpu_over_4 = div(t->recent_cpu , int_to_real(4));
-  //   real PRI_MAX_real = int_to_real(PRI_MAX);
-  //   real double_nice_real = mul(int_to_real(t->nice), int_to_real(2));
-  //   new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
-  //   t->priority = real_to_int(new_priority);
-  // } 
+  struct list_elem * e;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e)){
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if(t == idle_thread)
+       continue;
+    real new_priority;
+    real recent_cpu_over_4 = div(t->recent_cpu , int_to_real(4));
+    real PRI_MAX_real = int_to_real(PRI_MAX);
+    real double_nice_real = mul(int_to_real(t->nice), int_to_real(2));
+    new_priority = sub(sub(PRI_MAX_real, recent_cpu_over_4), double_nice_real);
+    int int_new_priority = real_to_int(new_priority);
+    if(int_new_priority > PRI_MAX)
+      t->priority = PRI_MAX;
+    else if (int_new_priority < PRI_MIN)
+      t->priority = PRI_MIN;
+    else
+      t->priority = int_new_priority;
+    // printf("priority_new: %d\n", t->priority);
+  } 
 }
 
 /* Update recent_cpu value for all threads including runnig thread.
    recent_cpu = (2*load_avg)/(2*load_avg + 1) * recent_cpu + nice */
 void update_recent_cpu_for_all(void)
 {
-  // struct list_elem *e;
-  // for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
-  // {
-  //   struct thread *t = list_entry (e, struct thread, elem);
-  //   update_recent_cpu(t);
-  // }
+  struct list_elem *e;
+  for (e = list_begin (&all_list); e != list_end (&all_list); e = list_next (e))
+  {
+    struct thread *t = list_entry (e, struct thread, allelem);
+    if(t == idle_thread)
+      continue;
+    update_recent_cpu(t);
+  }
 }
 
 void update_recent_cpu(struct thread * t)
 {
   real nice_real = int_to_real(t->nice);
   real recent_cpu_real = t->recent_cpu;
-
   real temp1 = mul(load_avg, int_to_real(2)); // la*2
   real temp2 = add(temp1, int_to_real(1)); // la*2+1
   real temp3 = div(temp1, temp2); //la*2 / la*2+1
-  // la*2 / la*2+1 * recent_cpu + nice
+
+  /* la*2 / la*2+1 * recent_cpu + nice */
   recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
+  // printf("nice_real: %d\n", nice_real);
+  // printf("temp1: %d", temp1.value);
+  // printf(" ,, temp2: %d", temp2.value);
+  // printf(" ,, temp3: %d", temp3.value);
+
+  // printf("  thread recent_cpu: %d\n", t->recent_cpu.value);  
   t->recent_cpu = recent_cpu_real;
-  // printf("recent_cpu after: %d\n", real_to_int(recent_cpu_real));
 }
 
 
@@ -659,17 +677,12 @@ void update_load_avg(void)
   if(running_thread() != idle_thread)
     ready_threads_number += 1;
   
-  // printf("# of ready_threads: %d\n", ready_threads_number);
   real ready_threads_number_real = int_to_real(ready_threads_number);
 
   real temp1 = div(mul(load_avg, fifty_nine_real), sixty_real);
   real temp2 = div(ready_threads_number_real, sixty_real);
-  // printf("load-avg= %d ,, temp1: %u ,, temp2: %d , #ready_threads= %d\n", thread_get_load_avg(), temp1.value, temp2.value, ready_threads_number);
-  // printf("(59/60)*load_avg: %d , temp2: %d\n", temp1.value, temp2.value);
 
   load_avg = add(temp1, temp2);
-  // printf("load_avg real value after: %d\n", load_avg.value);
-  // printf("load_avg from thread_get_load_avg: %d\n", thread_get_load_avg());
 
 }
 
