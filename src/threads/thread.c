@@ -142,16 +142,8 @@ thread_tick (void)
   else
     kernel_ticks++;
 
-  if(is_mlfqs() && t != idle_thread){
-    // if(is_second){
-    //   t->recent_cpu = sub(t->recent_cpu , int_to_real(2)) ;
-    //   is_second = false;
-    // }
-    // else
-      t->recent_cpu = add(t->recent_cpu , int_to_real(1)) ;
-      // printf("load_avg: %d\n", load_avg);
-      // printf("recent_cpu_int: %d\n", real_to_int(t->recent_cpu));
-  }
+  if(is_mlfqs() && t != idle_thread)
+    t->recent_cpu = add(t->recent_cpu , int_to_real(1)) ;
 
   /* Enforce preemption. */
   if (++thread_ticks >= TIME_SLICE)
@@ -652,18 +644,11 @@ void update_recent_cpu(struct thread * t)
   real recent_cpu_real = t->recent_cpu;
   real temp1 = mul(load_avg, int_to_real(2)); // la*2
   real temp2 = add(temp1, int_to_real(1)); // la*2+1
-  real temp3 = div(temp1, temp2); //la*2 / la*2+1
-  // printf("load_avg:  %d\n", load_avg);
+  real temp3 = div(temp1, temp2); //la*2 / la*2+1 >> 3276.8
+
 
   /* la*2 / la*2+1 * recent_cpu + nice */
   recent_cpu_real = add(mul(temp3, recent_cpu_real), nice_real);
-  // printf("nice_real: %d\n", nice_real);
-  // printf("nicd_int: %d\n", t->nice);
-  // printf("temp1: %d", temp1.value);
-  // printf(" ,, temp2: %d", temp2.value);
-  // printf(" ,, temp3: %d\n", temp3.value);
-
-  // printf("  thread recent_cpu: %d\n", t->recent_cpu.value);  
   t->recent_cpu = recent_cpu_real;
 }
 

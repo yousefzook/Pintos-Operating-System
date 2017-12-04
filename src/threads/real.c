@@ -1,4 +1,5 @@
 #include "real.h"
+#include <stdint.h>
 
 // convert from int to real and viceversa
 int real_to_int(real i){
@@ -23,12 +24,12 @@ real sub(real x, real y){
 }
 real mul(real x, real y){
 	real result;
-	result.value = x.value*(y.value/power(2,14));
+	result.value = ((int64_t)x.value)*y.value/power(2,14);
 	return result;
 }
 real div(real x, real y){
 	real result;
-	result.value = x.value/(y.value/power(2,14));
+	result.value = ((int64_t)x.value)*power(2,14)/y.value;
 	return result;
 }
 
