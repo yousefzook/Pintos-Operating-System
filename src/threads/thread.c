@@ -490,7 +490,6 @@ init_thread (struct thread *t, const char *name, int priority, int nice_by_100)
   t->number_of_locks = 0;
   t->obstacle_thread = NULL;
   t->nice = nice_by_100/100;
-  printf("nice: %d\n", t->nice);
   t->recent_cpu = int_to_real(0);
   list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
