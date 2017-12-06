@@ -141,8 +141,10 @@ void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
-const struct list *get_ready_list(void);
+/* Return ready list to be used in priority module.*/ 
+struct list *get_ready_list(void);
 
+/* Functions to be perform mlfqs.*/
 void update_priority_for_all_threads(void);
 void update_recent_cpu_for_all(void);
 bool is_mlfqs(void);

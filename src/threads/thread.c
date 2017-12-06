@@ -444,7 +444,7 @@ kernel_thread (thread_func *function, void *aux)
   function (aux);       /* Execute the thread function. */
   thread_exit ();       /* If function() returns, kill the thread. */
 }
-
+
 /* Returns the running thread. */
 struct thread *
 running_thread (void) 
@@ -620,7 +620,6 @@ void update_priority_for_all_threads(void)
       t->priority = PRI_MIN;
     else
       t->priority = int_new_priority;
-    // printf("priority_new: %d\n", t->priority);
   } 
 }
 
@@ -674,7 +673,7 @@ void update_load_avg(void)
 
 }
 
-const struct list *get_ready_list(){
+struct list *get_ready_list(){
   return &ready_list;
 }
 

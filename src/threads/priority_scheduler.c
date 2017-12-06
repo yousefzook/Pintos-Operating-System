@@ -91,7 +91,6 @@ donate_priority(struct lock * lock)
       elem->lock = lock;
       elem->pr = get_last_priority(temp);
       free_lock_entry(&obs->priority_list,lock);
-      //msg("thread %s of %d  donated to %s of %d ",temp->name,get_last_priority(temp),obs->name,get_last_priority(obs));
       list_push_front(&obs->priority_list,&elem->e); 
 
       /* update variables */
@@ -116,23 +115,9 @@ restore_priority(struct lock * lock)
   if(list_empty(list) || lock == NULL)
     return;
   if(t->number_of_locks == 0){
-     //msg("list_clear...................");
-  	 /*struct list_elem *e;  
-     for (e = list_begin (list); e != list_end (list);){
-      struct list_elem *old_e = e;
-      e = list_next(e);
-      list_remove(old_e);
-      free(list_entry(old_e,
-      		     struct priority_elem, e));
-     }*/
-  	//msg("still here sasadsa");
      while(!list_empty(list)){
-     //	msg("still here");
      	struct list_elem *old_e = list_begin (list);
-     	struct priority_elem * pe = list_entry(old_e,
-      		                      struct priority_elem, e);
      	list_remove(old_e);
-     	//free(pe);
      }
   }else
     free_lock_entry(list,lock); 
