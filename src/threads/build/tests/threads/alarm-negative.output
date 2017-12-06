@@ -1,0 +1,22 @@
+qemu-system-x86_64 -hda /tmp/SIGQzuMg7i.dsk -m 4 -net none -nographic -monitor null
+c[?7l[2J[0mSeaBIOS (version rel-1.11.0-0-g63451fca13-prebuilt.qemu-project.org)
+Booting from Hard Disk...
+PPiiLLoo  hhddaa1
+1
+LLooaaddiinngg.......................
+Kernel command line: -q run alarm-negative
+Pintos booting with 3,968 kB RAM...
+367 pages available in kernel pool.
+367 pages available in user pool.
+Calibrating timer...  419,020,800 loops/s.
+Boot complete.
+Executing 'alarm-negative':
+(alarm-negative) begin
+(alarm-negative) PASS
+(alarm-negative) end
+Execution of 'alarm-negative' complete.
+Timer: 24 ticks
+Thread: 0 idle ticks, 24 kernel ticks, 0 user ticks
+Console: 409 characters output
+Keyboard: 0 keys pressed
+Powering off...

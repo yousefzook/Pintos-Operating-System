@@ -1,0 +1,26 @@
+qemu-system-x86_64 -hda /tmp/AvTvhTOp7b.dsk -m 4 -net none -nographic -monitor null
+c[?7l[2J[0mSeaBIOS (version rel-1.11.0-0-g63451fca13-prebuilt.qemu-project.org)
+Booting from Hard Disk...
+PPiiLLoo  hhddaa1
+1
+LLooaaddiinngg.......................
+Kernel command line: -q run priority-change
+Pintos booting with 3,968 kB RAM...
+367 pages available in kernel pool.
+367 pages available in user pool.
+Calibrating timer...  419,020,800 loops/s.
+Boot complete.
+Executing 'priority-change':
+(priority-change) begin
+(priority-change) Creating a high-priority thread 2.
+(priority-change) Thread 2 now lowering priority.
+(priority-change) Thread 2 should have just lowered its priority.
+(priority-change) Thread 2 exiting.
+(priority-change) Thread 2 should have just exited.
+(priority-change) end
+Execution of 'priority-change' complete.
+Timer: 26 ticks
+Thread: 0 idle ticks, 26 kernel ticks, 0 user ticks
+Console: 649 characters output
+Keyboard: 0 keys pressed
+Powering off...

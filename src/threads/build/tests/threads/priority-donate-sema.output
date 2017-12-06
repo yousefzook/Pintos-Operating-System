@@ -1,0 +1,28 @@
+qemu-system-x86_64 -hda /tmp/JutDekHPr1.dsk -m 4 -net none -nographic -monitor null
+c[?7l[2J[0mSeaBIOS (version rel-1.11.0-0-g63451fca13-prebuilt.qemu-project.org)
+Booting from Hard Disk...
+PPiiLLoo  hhddaa1
+1
+LLooaaddiinngg.......................
+Kernel command line: -q run priority-donate-sema
+Pintos booting with 3,968 kB RAM...
+367 pages available in kernel pool.
+367 pages available in user pool.
+Calibrating timer...  314,163,200 loops/s.
+Boot complete.
+Executing 'priority-donate-sema':
+(priority-donate-sema) begin
+(priority-donate-sema) Thread L acquired lock.
+(priority-donate-sema) Thread L downed semaphore.
+(priority-donate-sema) Thread H acquired lock.
+(priority-donate-sema) Thread H finished.
+(priority-donate-sema) Thread M finished.
+(priority-donate-sema) Thread L finished.
+(priority-donate-sema) Main thread finished.
+(priority-donate-sema) end
+Execution of 'priority-donate-sema' complete.
+Timer: 27 ticks
+Thread: 0 idle ticks, 28 kernel ticks, 0 user ticks
+Console: 732 characters output
+Keyboard: 0 keys pressed
+Powering off...

@@ -1,0 +1,41 @@
+qemu-system-x86_64 -hda /tmp/WgoS63vkQI.dsk -m 4 -net none -nographic -monitor null
+c[?7l[2J[0mSeaBIOS (version rel-1.11.0-0-g63451fca13-prebuilt.qemu-project.org)
+Booting from Hard Disk...
+PPiiLLoo  hhddaa1
+1
+LLooaaddiinngg.......................
+Kernel command line: -q run priority-sema
+Pintos booting with 3,968 kB RAM...
+367 pages available in kernel pool.
+367 pages available in user pool.
+Calibrating timer...  419,020,800 loops/s.
+Boot complete.
+Executing 'priority-sema':
+(priority-sema) begin
+(priority-sema) Thread priority 30 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 29 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 28 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 27 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 26 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 25 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 24 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 23 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 22 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) Thread priority 21 woke up.
+(priority-sema) Back in main thread.
+(priority-sema) end
+Execution of 'priority-sema' complete.
+Timer: 30 ticks
+Thread: 0 idle ticks, 30 kernel ticks, 0 user ticks
+Console: 1192 characters output
+Keyboard: 0 keys pressed
+Powering off...

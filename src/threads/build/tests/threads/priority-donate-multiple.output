@@ -1,0 +1,31 @@
+qemu-system-x86_64 -hda /tmp/qfyAV3hv6C.dsk -m 4 -net none -nographic -monitor null
+c[?7l[2J[0mSeaBIOS (version rel-1.11.0-0-g63451fca13-prebuilt.qemu-project.org)
+Booting from Hard Disk...
+PPiiLLoo  hhddaa1
+1
+LLooaaddiinngg.......................
+Kernel command line: -q run priority-donate-multiple
+Pintos booting with 3,968 kB RAM...
+367 pages available in kernel pool.
+367 pages available in user pool.
+Calibrating timer...  419,020,800 loops/s.
+Boot complete.
+Executing 'priority-donate-multiple':
+(priority-donate-multiple) begin
+(priority-donate-multiple) Main thread should have priority 32.  Actual priority: 32.
+(priority-donate-multiple) Main thread should have priority 33.  Actual priority: 33.
+(priority-donate-multiple) Thread b acquired lock b.
+(priority-donate-multiple) Thread b finished.
+(priority-donate-multiple) Thread b should have just finished.
+(priority-donate-multiple) Main thread should have priority 32.  Actual priority: 32.
+(priority-donate-multiple) Thread a acquired lock a.
+(priority-donate-multiple) Thread a finished.
+(priority-donate-multiple) Thread a should have just finished.
+(priority-donate-multiple) Main thread should have priority 31.  Actual priority: 31.
+(priority-donate-multiple) end
+Execution of 'priority-donate-multiple' complete.
+Timer: 29 ticks
+Thread: 0 idle ticks, 29 kernel ticks, 0 user ticks
+Console: 1105 characters output
+Keyboard: 0 keys pressed
+Powering off...
