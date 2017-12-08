@@ -6,6 +6,11 @@ static struct list *ready_list;
 static inline struct list_elem* get_max(void);
 static inline void free_lock_entry(struct list*,struct lock*);
 
+/* a priority_elem that's put into the prirority list.
+   it consists of a pointer to a LOCK that the thread holds
+   provided that at least one thread waiting on that lock 
+   caused a donation, and a priority PR that's the max thread
+   priority waiting on that lock */
 
 struct priority_elem{
 	struct list_elem e;
@@ -27,6 +32,9 @@ get_last_priority(struct thread * t)
 		                      struct priority_elem, e);
 	return pe->pr;
 }
+
+/* A comparator function for getting the max element
+   from a list */
 
 bool 
 less_than (const struct list_elem *a,
@@ -75,6 +83,10 @@ priority_scheduler(){
 
 }
 
+/* the donation function that donate its priority to
+   lock holder and checks the chain of waiting thread
+   to perform a donation if needed */
+   
 void 
 donate_priority(struct lock * lock)
 {
@@ -92,7 +104,6 @@ donate_priority(struct lock * lock)
       elem->lock = lock;
       elem->pr = get_last_priority(temp);
       free_lock_entry(&obs->priority_list,lock);
-      //msg("thread %s of %d  donated to %s of %d ",temp->name,get_last_priority(temp),obs->name,get_last_priority(obs));
       list_push_front(&obs->priority_list,&elem->e); 
 
       /* update variables */
@@ -108,7 +119,8 @@ donate_priority(struct lock * lock)
   }
 }
 
-
+/* restores the priority of the lock holder
+   and removes the lock entry from its priority list */
 void 
 restore_priority(struct lock * lock)
 {
@@ -117,29 +129,16 @@ restore_priority(struct lock * lock)
   if(list_empty(list) || lock == NULL)
     return;
   if(t->number_of_locks == 0){
-     //msg("list_clear...................");
-  	 /*struct list_elem *e;  
-     for (e = list_begin (list); e != list_end (list);){
-      struct list_elem *old_e = e;
-      e = list_next(e);
-      list_remove(old_e);
-      free(list_entry(old_e,
-      		     struct priority_elem, e));
-     }*/
-  	//msg("still here sasadsa");
      while(!list_empty(list)){
-     //	msg("still here");
      	struct list_elem *old_e = list_begin (list);
-     	struct priority_elem * pe = list_entry(old_e,
-      		                      struct priority_elem, e);
      	list_remove(old_e);
-     	//free(pe);
      }
   }else
     free_lock_entry(list,lock); 
 }
 
-
+/* removes a priority_elem that corrosponds to
+   the LOCK from the priority list LIST */ 
 static inline void 
 free_lock_entry(struct list* list,struct lock* lock)
 {
