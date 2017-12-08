@@ -9,8 +9,17 @@
 >> Fill in the names and email addresses of your group members.
 
 Nada Ayman <Nada96Ayman@gmail.com>
-Youssef Ahmed <engyousefahmed@gmail.com>
+Youssef Ahmed <email@domain.example>
 Yousef Zook <email@domain.example>
+
+---- PRELIMINARIES ----
+
+>> If you have any preliminary comments on your submission, notes for the
+>> TAs, or extra credit, please give them here.
+
+>> Please cite any offline or online sources you consulted while
+>> preparing your submission, other than the Pintos documentation, course
+>> text, lecture notes, and course staff.
 
 			     ALARM CLOCK
 			     ===========
@@ -36,53 +45,24 @@ static struct list sleepers;    // Global list of sleeping threads.
 >> A2: Briefly describe what happens in a call to timer_sleep(),
 >> including the effects of the timer interrupt handler.
 
-- When the timer_sleep() is called, it checks if the number of ticks is > 0 , otherwise the funtion
-returns immediatley. Then it creates a new sleep_elem and intializes its members
-and adds it to the sleepers list, where the insertion is done in order. Finally it calls thread_block() to block the thread. 
-This is done ensuring the interrupts are disabled to prevent the timer interrupt from modifying the sleepers list while 
-another insertion is done.
 
 >> A3: What steps are taken to minimize the amount of time spent in
 >> the timer interrupt handler?
-
-- The sleeping threads are put into the "sleepers list" in a non-decreasing order according to their time_to_wake.
-This assures that the first thread to wake up is at the beginning of the list, thus the timre interrupt
-handler doesn't have to iterate over the whole list each time; it stops at the first sleeping thread that
-its waking time had not passed yet.
-
 
 ---- SYNCHRONIZATION ----
 
 >> A4: How are race conditions avoided when multiple threads call
 >> timer_sleep() simultaneously?
 
-- Since there's only one the thread running at a time, only this thread can call timer_sleep().
-As this thread disables interrupt, no multiple threads can enter the timer_sleep() simultaneously.
-
+By disabling interrupts.
 
 >> A5: How are race conditions avoided when a timer interrupt occurs
 >> during a call to timer_sleep()?
-
-- By disabling interrupts, this prevents the timer interrupt handler from modifying the sleepers list while 
-another insertion is done.
-
 
 ---- RATIONALE ----
 
 >> A6: Why did you choose this design?  In what ways is it superior to
 >> another design you considered?
-
-- This design is simple and reliable, by disabling interrupts race conditions are avoided.
-By maintaing the sleepers list ordered, the amount of time spent in the timer interrupt handlerthe is reduced.
-
-- Another way to avoid race conditions in the sleepers list is to use locks.
-if the current thread called timer_sleep() and its running in its critical section after acuiring the lock,
-the timer interrupt would be able to interrupt the execution, causing many side effects:
-- In case of priority scheduling, this'll unnecesseraly modifynig the priority of threads competing on the lock.
-- The call to thread_block() may be delayed for a long time , while instead it should spend that time sleeping.
-
-- Eventually, this design has less side effects, and  more reliable
-
 
 			 PRIORITY SCHEDULING
 			 ===================
@@ -192,8 +172,18 @@ Locks and Condition variables: they are implemented using semaphores, therefore 
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
-A thread may change its priorty while being donated the priority from a higher priority thread or
-returning to its original priority after releasing a lock.
+-A thread could be setting its prirority to a certain value but meanwhile the timer interrupts the thread
+forcing it to yield due to a time-slice end. In this case if high-priority thread runs and tries to require 
+a lock held by the former thread, the high-priority thread donates its priority to the lock holder causing 
+a race condition trying to modify the priority value.
+Since our implemntation handles the priority donation in a separate list, only one thread,that is, the runnging
+thread could modify its "priority variable". so this case wouldn't happen. 
+However that prevents race condition but not memory inconsistncy,that is, not all threads have the same view
+of the priority of that thread, so by disabling interrupt in the thread_set_priority() the timer cann't
+interrupt the thread while modifying its own priority.
+
+-As described earlier,in our implemntation there's no potential for a race to happen,however, using a lock 
+would add nothing, in addition, it doesn't solve the  memory inconsistncy error.
 
 Solution: 
 
@@ -202,8 +192,18 @@ Solution:
 >> B7: Why did you choose this design? In what ways is it superior to
 >> another design you considered?
 
-Using the list provided as a stack was chosen over lots of other alternatives to
-implement priority donation.
+This design was chosen over other alternatives to implement priority donation. Using both a pointer
+to the "obsatcle_thread",that is, the thread that holds the lock we're waitintg for, besides the list
+of the inherited priorities to memorize the last priority history, provides many advantages:
+
+1- By using the "obsatcle_thread",A major advantage is when new high-priority thread blocks waiting on a lock, you always have the information needed to climb the priority chain,hence, reducing the donation time.
+
+2- By using the priority_list , when a thread releases one of the locks it was holding it can easily 
+retains its proper priority from the priority history in its list, without any need to do further computaions.
+
+- As the priority_list only contains one entry of every lock it holds, proivded that threads waiting on this lock 
+caused a donation, this guarantees taht the memory foot-print in the priority_list is minimmal.
+
 
 			  ADVANCED SCHEDULER
 			  ==================
