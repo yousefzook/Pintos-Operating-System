@@ -26,7 +26,7 @@
    int64_t time_to_wake;			-time_to_wake: min time for the thread to sleep.
  };				*/
  
- static struct list sleepers;    // Global list of sleeping threads.
+ static struct list sleepers;    // Static list of sleeping threads.
  
  
  ---- ALGORITHMS ----
@@ -231,7 +231,7 @@ caused a donation, this guarantees that the memory footprint in the priority_lis
 >> `struct' member, global or static variable, `typedef', or
 >> enumeration.  Identify the purpose of each in 25 words or less.
 
-would we copy the struct thread?
+
 
 ---- ALGORITHMS ----
 
