@@ -5,23 +5,10 @@
  			+--------------------+
  				   
  ---- GROUP ----
- 
- >> Fill in the names and email addresses of your group members.
- 
+
  -Nada Ayman <Nada96Ayman@gmail.com>
  -Youssef Ahmed <engyousefahmed@gmail.com>
  -Yousef Zook <email@domain.example>
- 
-
----- PRELIMINARIES ----
-
->> If you have any preliminary comments on your submission, notes for the
->> TAs, or extra credit, please give them here.
-
->> Please cite any offline or online sources you consulted while
->> preparing your submission, other than the Pintos documentation, course
->> text, lecture notes, and course staff.
-
 
  			     ALARM CLOCK
  			     ===========
@@ -47,9 +34,9 @@
  >> A2: Briefly describe what happens in a call to timer_sleep(),
  >> including the effects of the timer interrupt handler.
  
- - When the timer_sleep() is called, it checks if the number of ticks is > 0 , otherwise the funtion
- returns immediatley. Then it creates a new sleep_elem and intializes its members
- and adds it to the sleepers list, where the insertion is done in order. Finally it calls thread_block() to block the thread. 
+ - When the timer_sleep() is called, it checks if the number of ticks is > 0, otherwise, the function returns immediately. Then it creates a new sleep_elem and initializes its members and adds it to the sleepers list, where the insertion is done in order. Finally, it calls thread_block() to block the thread.
+ 
+ 
  This is done ensuring the interrupts are disabled to prevent the timer interrupt from modifying the sleepers list while     
  another insertion is done.
  
@@ -57,9 +44,8 @@
  >> the timer interrupt handler?
  
  - The sleeping threads are put into the "sleepers list" in a non-decreasing order according to their time_to_wake.
- This assures that the first thread to wake up is at the beginning of the list, thus the timre interrupt
- handler doesn't have to iterate over the whole list each time; it stops at the first sleeping thread that
- its waking time had not passed yet.
+ This assures that the first thread to wake up is at the beginning of the list, thus the timer interrupt handler doesn't have to iterate over the whole list each time; it stops at the first sleeping thread that
+its waking time had not passed yet.
   
  ---- SYNCHRONIZATION ----
  
@@ -83,17 +69,17 @@
  >> another design you considered?
  
 - This design is simple and reliable, by disabling interrupts race conditions are avoided.
- By maintaing the sleepers list ordered, the amount of time spent in the timer interrupt handlerthe is reduced.
+ By maintaining the sleepers list ordered the amount of time spent in the timer interrupt handler the is reduced.
  
 - Another way to avoid race conditions in the sleepers list is to use locks.
-  If the current thread called timer_sleep() and its running in its critical section after acuiring the lock,
+  If the current thread called timer_sleep() and its running in its critical section after acquiring the lock,
   the timer interrupt would be able to interrupt the execution, causing many side effects:
  
-  1- In case of priority scheduling, this'll unnecesseraly modifynig the priority of threads competing on the lock.
+  1- In case of priority scheduling, this will unnecessarily modify the priority of threads competing on the lock.
   
-  2- The call to thread_block() may be delayed for a long time , while instead it should spend that time sleeping.
+  2- The call to thread_block() may be delayed for a long time, while instead, it should spend that time sleeping.
 
-- Eventually, this design has less side effects, and  more reliable
+- Eventually, this design has fewer side effects, and  more reliable
 
 
 			 PRIORITY SCHEDULING
@@ -175,27 +161,29 @@ after B releases lock2 it's back to it's original priority 35 and C aquires lock
 >> B3: How do you ensure that the highest priority thread waiting for
 >> a lock, semaphore, or condition variable wakes up first?
 
-Semaphores: on calling sema_up(), the thread with the highest priority in the waiters list of the semaphore is obtained  list_max(), then unblocked. Also priority donation guarantees that the thread with the 
-highest priority gets to obtain the lock it aquires first.
+Semaphores: on calling sema_up(), the thread with the highest priority in the waiters list of the semaphore is obtained  list_max(), then unblocked. Also, priority donation guarantees that the thread with the 
+highest priority gets to obtain the lock it acquires first.
 Locks and Condition variables: they are implemented using semaphores, therefore they follow the same previous logic.
 
 >> B4: Describe the sequence of events when a call to lock_acquire()
 >> causes a priority donation.  How is nested donation handled?
 
-1) check if thread can aquire the lock.
-2) if not and priority schedualing in used perform priority donation.
-3) when manage to aquire the lock.
-	-set lock holder
-	-increment the number_of_threads held by the thread.
-	-set the obstacle_thread = NULL (The thread its waiting for).
+1) check if the thread can acquire the lock.
+2) If not and priority donation is performed by calling donate_priority().
+	- set obstacle_thread to lock holder.
+	- Check if the new priority is higher than the lock holder's priority.
+	- If so, delete any previous entry in the lock holder's priority list.
+	  that corresponds to that lock.
+	- add the new priority at the beginning of the lock holder's priority list.
+	- Repeat for the lock holder until the chain ends or a donation isn't valid.
 
 >> B5: Describe the sequence of events when lock_release() is called
 >> on a lock that a higher-priority thread is waiting for.
 
 1) decrement the number_of_locks held by the thread.
 2) set the lock holder to NULL
-3) if priority schedualing is used, 
-   restore the original priority of the thread before the priority donation
+3) if priority scheduling is used, 
+   restore the original priority of the thread.
 4) sema_up();
 
 ---- SYNCHRONIZATION ----
@@ -204,18 +192,16 @@ Locks and Condition variables: they are implemented using semaphores, therefore 
 >> how your implementation avoids it.  Can you use a lock to avoid
 >> this race?
 
--A thread could be setting its prirority to a certain value but meanwhile the timer interrupts the thread
-forcing it to yield due to a time-slice end. In this case if high-priority thread runs and tries to require 
-a lock held by the former thread, the high-priority thread donates its priority to the lock holder causing 
-a race condition trying to modify the priority value.
-Since our implemntation handles the priority donation in a separate list, only one thread,that is, the runnging
+-A thread could be setting its priority to a certain value but meanwhile, the timer interrupts the thread
+forcing it to yield due to a time-slice end. In this case, if high-priority thread runs and tries to require a lock held by the former thread, the high-priority thread donates its priority to the lock holder causing a race condition trying to modify the priority value.
+Since our implementation handles the priority donation in a separate list, only one thread, that is, the running
 thread could modify its "priority variable". so this case wouldn't happen. 
-However that prevents race condition but not memory inconsistncy,that is, not all threads have the same view
-of the priority of that thread, so by disabling interrupt in the thread_set_priority() the timer cann't
+However that prevents race condition but not memory inconsistency, that is, not all threads have the same view
+of the priority of that thread, so by disabling interrupt in the thread_set_priority() the timer can't
 interrupt the thread while modifying its own priority.
 
--As described earlier,in our implemntation there's no potential for a race to happen,however, using a lock 
-would add nothing, in addition, it doesn't solve the  memory inconsistncy error.
+-As described earlier, in our implementation there's no potential for a race to happen, however, using a lock 
+would add nothing, in addition, it doesn't solve the memory inconsistency error.
 
 
 ---- RATIONALE ----
@@ -224,16 +210,16 @@ would add nothing, in addition, it doesn't solve the  memory inconsistncy error.
 >> another design you considered?
 
 This design was chosen over other alternatives to implement priority donation. Using both a pointer
-to the "obsatcle_thread",that is, the thread that holds the lock we're waitintg for, besides the list
+to the "obsatcle_thread", that is, the thread that holds the lock we're waiting for, besides the list
 of the inherited priorities to memorize the last priority history, provides many advantages:
 
-1- By using the "obsatcle_thread",A major advantage is when new high-priority thread blocks waiting on a lock, you always have the information needed to climb the priority chain,hence, reducing the donation time.
+1- By using the "obsatcle_thread", A major advantage is when new high-priority thread blocks waiting on a lock, you always have the information needed to climb the priority chain, hence, reducing the donation time.
 
-2- By using the priority_list , when a thread releases one of the locks it was holding it can easily 
-retains its proper priority from the priority history in its list, without any need to do further computaions.
+2- By using the priority_list, when a thread releases one of the locks it was holding it can easily 
+retains its proper priority from the priority history in its list, without any need to do further computations.
 
-- As the priority_list only contains one entry of every lock it holds, proivded that threads waiting on this lock 
-caused a donation, this guarantees taht the memory foot-print in the priority_list is minimmal.
+- As the priority_list only contains one entry of every lock it holds, provided that threads waiting on this lock 
+caused a donation, this guarantees that the memory footprint in the priority_list is minimal.
 
 
 			  ADVANCED SCHEDULER
