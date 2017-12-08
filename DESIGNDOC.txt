@@ -1,16 +1,17 @@
-			+--------------------+
-			|        CS 140      |
-			| PROJECT 1: THREADS |
-			|   DESIGN DOCUMENT  |
-			+--------------------+
-				   
----- GROUP ----
-
->> Fill in the names and email addresses of your group members.
-
-Nada Ayman <Nada96Ayman@gmail.com>
-Youssef Ahmed <email@domain.example>
-Yousef Zook <email@domain.example>
+ 			+--------------------+
+ 			|        CS 140      |
+ 			| PROJECT 1: THREADS |
+ 			|   DESIGN DOCUMENT  |
+ 			+--------------------+
+ 				   
+ ---- GROUP ----
+ 
+ >> Fill in the names and email addresses of your group members.
+ 
+ -Nada Ayman <Nada96Ayman@gmail.com>
+ -Youssef Ahmed <engyousefahmed@gmail.com>
+ -Yousef Zook <email@domain.example>
+ 
 
 ---- PRELIMINARIES ----
 
@@ -21,48 +22,79 @@ Yousef Zook <email@domain.example>
 >> preparing your submission, other than the Pintos documentation, course
 >> text, lecture notes, and course staff.
 
-			     ALARM CLOCK
-			     ===========
 
----- DATA STRUCTURES ----
+ 			     ALARM CLOCK
+ 			     ===========
+ 
+ ---- DATA STRUCTURES ----
+ 
+ >> A1: Copy here the declaration of each new or changed `struct' or
+ >> `struct' member, global or static variable, `typedef', or
+ >> enumeration.  Identify the purpose of each in 25 words or less.
+ 
+ struct sleep_elem		/* a struct for the sleeping thread that contains
+ {				     
+   struct list_elem e;			-list_elem: to be put in the sleepers list
+   struct thread * t;			-thread: Pointer on the sleeping thread struct.
+   int64_t time_to_wake;			-time_to_wake: min time for the thread to sleep.
+ };				*/
+ 
+ static struct list sleepers;    // Global list of sleeping threads.
+ 
+ 
+ ---- ALGORITHMS ----
+ 
+ >> A2: Briefly describe what happens in a call to timer_sleep(),
+ >> including the effects of the timer interrupt handler.
+ 
+ - When the timer_sleep() is called, it checks if the number of ticks is > 0 , otherwise the funtion
+ returns immediatley. Then it creates a new sleep_elem and intializes its members
+ and adds it to the sleepers list, where the insertion is done in order. Finally it calls thread_block() to block the thread. 
+ This is done ensuring the interrupts are disabled to prevent the timer interrupt from modifying the sleepers list while     
+ another insertion is done.
+ 
+ >> A3: What steps are taken to minimize the amount of time spent in
+ >> the timer interrupt handler?
+ 
+ - The sleeping threads are put into the "sleepers list" in a non-decreasing order according to their time_to_wake.
+ This assures that the first thread to wake up is at the beginning of the list, thus the timre interrupt
+ handler doesn't have to iterate over the whole list each time; it stops at the first sleeping thread that
+ its waking time had not passed yet.
+  
+ ---- SYNCHRONIZATION ----
+ 
+ >> A4: How are race conditions avoided when multiple threads call
+ >> timer_sleep() simultaneously?
+ 
+ - Since there's only one the thread running at a time, only this thread can call timer_sleep().
+ As this thread disables interrupt, no multiple threads can enter the timer_sleep() simultaneously.
+ 
+ 
+ >> A5: How are race conditions avoided when a timer interrupt occurs
+ >> during a call to timer_sleep()?
+ 
+ - By disabling interrupts, this prevents the timer interrupt handler from modifying the sleepers list while 
+ another insertion is done.
+ 
+ 
+ ---- RATIONALE ----
+ 
+ >> A6: Why did you choose this design?  In what ways is it superior to
+ >> another design you considered?
+ 
+- This design is simple and reliable, by disabling interrupts race conditions are avoided.
+ By maintaing the sleepers list ordered, the amount of time spent in the timer interrupt handlerthe is reduced.
+ 
+- Another way to avoid race conditions in the sleepers list is to use locks.
+  If the current thread called timer_sleep() and its running in its critical section after acuiring the lock,
+  the timer interrupt would be able to interrupt the execution, causing many side effects:
+ 
+  1- In case of priority scheduling, this'll unnecesseraly modifynig the priority of threads competing on the lock.
+  
+  2- The call to thread_block() may be delayed for a long time , while instead it should spend that time sleeping.
 
->> A1: Copy here the declaration of each new or changed `struct' or
->> `struct' member, global or static variable, `typedef', or
->> enumeration.  Identify the purpose of each in 25 words or less.
+- Eventually, this design has less side effects, and  more reliable
 
-struct sleep_elem		/* a struct for the sleeping thread that contains
-{				     
-  struct list_elem e;			-list_elem: to be put in the sleepers list
-  struct thread * t;			-thread: Pointer on the sleeping thread struct.
-  int64_t time_to_wake;			-time_to_wake: min time for the thread to sleep.
-};				*/
-
-static struct list sleepers;    // Global list of sleeping threads.
-
-
----- ALGORITHMS ----
-
->> A2: Briefly describe what happens in a call to timer_sleep(),
->> including the effects of the timer interrupt handler.
-
-
->> A3: What steps are taken to minimize the amount of time spent in
->> the timer interrupt handler?
-
----- SYNCHRONIZATION ----
-
->> A4: How are race conditions avoided when multiple threads call
->> timer_sleep() simultaneously?
-
-By disabling interrupts.
-
->> A5: How are race conditions avoided when a timer interrupt occurs
->> during a call to timer_sleep()?
-
----- RATIONALE ----
-
->> A6: Why did you choose this design?  In what ways is it superior to
->> another design you considered?
 
 			 PRIORITY SCHEDULING
 			 ===================
