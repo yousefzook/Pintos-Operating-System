@@ -217,7 +217,6 @@ interrupt the thread while modifying its own priority.
 -As described earlier,in our implemntation there's no potential for a race to happen,however, using a lock 
 would add nothing, in addition, it doesn't solve the  memory inconsistncy error.
 
-Solution: 
 
 ---- RATIONALE ----
 
