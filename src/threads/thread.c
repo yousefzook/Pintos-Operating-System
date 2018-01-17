@@ -318,7 +318,6 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-  
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
@@ -485,6 +484,7 @@ init_thread (struct thread *t, const char *name, int priority, int nice_by_100)
   t->obstacle_thread = NULL;
   t->nice = nice_by_100/100;
   t->recent_cpu = int_to_real(0);
+  list_init(&t->fd_table);
   list_init(&t->priority_list);
   list_push_back (&all_list, &t->allelem);
 }

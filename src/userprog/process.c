@@ -15,42 +15,121 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
-static thread_func start_process NO_RETURN;
-static bool load (const char *cmdline, void (**eip) (void), void **esp);
+#define MAX_NUM_OF_ARGS 20
+char* track_word;
 
+static thread_func start_process NO_RETURN;
+static bool load (const char ** tokens, void (**eip) (void), void **esp);
+
+static char ** tokenize(const char * str,char delimiter)
+{
+    char** tokens = malloc((MAX_NUM_OF_ARGS+1)*sizeof(char*));
+    int i=0;
+    char* word = malloc(strlen(str)+1);
+    track_word = word;
+    char* end = word;
+    bool completed_word= false;
+    bool within_qoutes = false;
+    while(*str)
+    {
+        if(*str == '\"')
+            within_qoutes =!within_qoutes;
+        if(*str != delimiter || within_qoutes)
+        {
+            completed_word = true;
+            *end=*str;
+            end++;
+        }
+        else if(completed_word)
+        {
+            completed_word = false;
+            *end = 0;
+            end++;
+            tokens[i]=word;
+            word = end;
+            i++;
+        }
+        str++;
+    }
+    if(*word)
+    {
+        tokens[i]=word;
+        tokens[i+1]=NULL;
+    }
+    else
+        tokens[i]=NULL;
+    return tokens;
+}
+
+static void free_track_word(void){
+  /*if(track_word != NULL)
+    free(track_word);*/
+}
+
+static int get_numof_tokens(const char ** tokens){
+  int i =0;
+  while(tokens[i] !=NULL)
+    i++;
+  return i;
+}
+static bool check_possible_overflow(const char ** tokens){
+  int i = get_numof_tokens(tokens);
+  if((2*i+1) >= PGSIZE)
+    return true;
+  return false;
+}
+static void push_arguments(const char ** tokens,void **esp){
+  int len = get_numof_tokens(tokens);
+  void *argv[len+1]; 
+  argv[len] = NULL;
+  int r_index = len-1;
+
+  while(r_index >= 0){
+    *esp = tokens[r_index];
+    argv[r_index]= &esp;
+    esp--;
+    r_index--;
+  }
+  r_index = len;
+  while(r_index >= 0){
+    *esp = argv[r_index];
+    esp--;
+  }
+  *esp = 0;
+}
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
    thread id, or TID_ERROR if the thread cannot be created. */
 tid_t
-process_execute (const char *file_name) 
+process_execute (const char *cmd_line) 
 {
-  char *fn_copy;
+  char *file_name;
   tid_t tid;
-
-  /* Make a copy of FILE_NAME.
-     Otherwise there's a race between the caller and load(). */
-  fn_copy = palloc_get_page (0);
-  if (fn_copy == NULL)
+  char ** tokens = tokenize(cmd_line,' ');
+  if(check_possible_overflow(tokens))
     return TID_ERROR;
-  strlcpy (fn_copy, file_name, PGSIZE);
-
+  file_name = tokens[0];
+  printf("ttttttttttttttttt\n");
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
-  if (tid == TID_ERROR)
-    palloc_free_page (fn_copy); 
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, *tokens);
+  if (tid == TID_ERROR){
+    free (tokens);
+    free_track_word();
+  }
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *file_name_)
+start_process (void *cmd_line_tokens)
 {
-  char *file_name = file_name_;
+  const char ** tokens = &cmd_line_tokens;
   struct intr_frame if_;
   bool success;
 
@@ -59,10 +138,11 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  success = load (tokens, &if_.eip, &if_.esp);
 
   /* If load failed, quit. */
-  palloc_free_page (file_name);
+  free (tokens);
+  free_track_word();
   if (!success) 
     thread_exit ();
 
@@ -82,7 +162,6 @@ start_process (void *file_name_)
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
-
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
@@ -206,7 +285,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char *file_name, void (**eip) (void), void **esp) 
+load (const char ** tokens, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -214,7 +293,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-
+  char * file_name = tokens[0];
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -304,6 +383,8 @@ load (const char *file_name, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
+  
+  push_arguments(tokens,esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -315,7 +396,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
   file_close (file);
   return success;
 }
-
+
 /* load() helpers. */
 
 static bool install_page (void *upage, void *kpage, bool writable);
@@ -368,15 +449,11 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
-
         - READ_BYTES bytes at UPAGE must be read from FILE
           starting at offset OFS.
-
         - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-
    The pages initialized by this function must be writable by the
    user process if WRITABLE is true, read-only otherwise.
-
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool

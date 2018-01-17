@@ -94,6 +94,8 @@ struct thread
     int nice;                           /* Niceness of a thread. */
     real recent_cpu;                    /* An estimate of the CPU time the thread has used recently. */
 
+    struct list fd_table ;
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -102,6 +104,13 @@ struct thread
     /* Owned by thread.c. */
     unsigned magic;                     /* Detects stack overflow. */
   };
+
+/* srtuct for file descriptor */
+struct descriptor{
+  int fd;
+  struct file *file;
+  struct list_elem fd_elem; 
+};
 
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
