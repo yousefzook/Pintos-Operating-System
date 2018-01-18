@@ -15,90 +15,82 @@
 #include "threads/init.h"
 #include "threads/interrupt.h"
 #include "threads/palloc.h"
+#include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
 #define MAX_NUM_OF_ARGS 20
-char* track_word;
+#define WORD_SIZE 4
 
 static thread_func start_process NO_RETURN;
-static bool load (const char ** tokens, void (**eip) (void), void **esp);
+static bool load (const char * file_name, void (**eip) (void), void **esp);
 
-static char ** tokenize(const char * str,char delimiter)
-{
-    char** tokens = malloc((MAX_NUM_OF_ARGS+1)*sizeof(char*));
-    int i=0;
-    char* word = malloc(strlen(str)+1);
-    track_word = word;
-    char* end = word;
-    bool completed_word= false;
-    bool within_qoutes = false;
-    while(*str)
-    {
-        if(*str == '\"')
-            within_qoutes =!within_qoutes;
-        if(*str != delimiter || within_qoutes)
-        {
-            completed_word = true;
-            *end=*str;
-            end++;
-        }
-        else if(completed_word)
-        {
-            completed_word = false;
-            *end = 0;
-            end++;
-            tokens[i]=word;
-            word = end;
-            i++;
-        }
-        str++;
-    }
-    if(*word)
-    {
-        tokens[i]=word;
-        tokens[i+1]=NULL;
-    }
-    else
-        tokens[i]=NULL;
-    return tokens;
-}
 
-static void free_track_word(){
-  /*if(track_word != NULL)
-    free(track_word);*/
-}
-
-static int get_numof_tokens(const char ** tokens){
+static int get_numof_tokens(char ** tokens){
   int i =0;
   while(tokens[i] !=NULL)
     i++;
   return i;
 }
-static void check_possible_overflow(const char ** tokens){
-  int i = get_numof_tokens(tokens);
+
+static bool check_possible_overflow(char ** arguments){
+  int i = get_numof_tokens(arguments);
   if((2*i+1) >= PGSIZE)
-    return TID_ERROR;
-
+    return true;
+  return false;
 }
-static void push_arguments(const char ** tokens,void **esp){
-  int len = get_numof_tokens(tokens);
-  void *argv[len+1]; 
-  argv[len] = NULL;
-  int r_index = len-1;
 
-  while(r_index >= 0){
-    *esp = tokens[r_index];
-    argv[r_index]= &esp;
-    esp--;
+static void push_arguments(char ** arguments,void **esp){
+
+  int len = get_numof_tokens(arguments);
+  void *addr[len+1]; 
+  addr[len] = (uint32_t) NULL;
+  int r_index = len-1;
+  void * stack_pointer = *esp;
+  int arg_len;
+  int remain = 0;
+  /* set arguments data */
+  while(r_index >= 0){  
+    arg_len = strlen(arguments[r_index]) + 1;
+    remain = (remain+arg_len)%WORD_SIZE;
+    stack_pointer -= arg_len;
+    memcpy(stack_pointer, arguments[r_index], arg_len);
+    addr[r_index]= stack_pointer;
+    printf("%#08x: %s\n", addr[r_index],arguments[r_index]);   
     r_index--;
   }
+  /* word align */
+  stack_pointer -= WORD_SIZE - remain;
+  /* set arguments' adresses */
   r_index = len;
   while(r_index >= 0){
-    *esp = argv[r_index];
-    esp--;
+    stack_pointer-= WORD_SIZE;
+    *((void**) stack_pointer)= addr[r_index];
+    printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
+    r_index--;
   }
-  *esp = 0;
+  /* set argc & return value */ 
+  stack_pointer-= WORD_SIZE;
+  *((int*)stack_pointer) = len;
+  printf("%#08x: %d\n", stack_pointer,len);  
+  stack_pointer-= WORD_SIZE;
+  *((int*)stack_pointer) = 0;
+  printf("%#08x: %d\n", stack_pointer,0); 
+  *esp = stack_pointer;
+}
+
+static char**
+tokenize(char *cmd_line){
+  int i = 0;
+  char *token, *save_ptr;
+  char** tokens = palloc_get_page (0);
+   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+        token = strtok_r (NULL, " ", &save_ptr))
+   {
+     tokens[i] = token;
+     i++;
+   }
+   return tokens;
 }
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -107,17 +99,27 @@ static void push_arguments(const char ** tokens,void **esp){
 tid_t
 process_execute (const char *cmd_line) 
 {
-  char *file_name;
+  char *cmd_line_copy,*file_name;
   tid_t tid;
-  char ** tokens = tokenize(cmd_line," ");
-  check_possible_overflow(tokens);
-  file_name = tokens[0];
+
+  /* Make a copy of FILE_NAME.
+     Otherwise there's a race between the caller and load(). */
+  cmd_line_copy = palloc_get_page (0);
+  if (cmd_line_copy == NULL)
+    return TID_ERROR;
+  strlcpy (cmd_line_copy, cmd_line, PGSIZE);
+
+  /* get arguments */
+  char** args = tokenize(cmd_line_copy);
+  if(check_possible_overflow(args))
+    return TID_ERROR;
+  file_name = args[0];
 
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, &tokens);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, args);
   if (tid == TID_ERROR){
-    free (tokens);
-    free_track_word();
+    palloc_free_page (cmd_line_copy);
+    palloc_free_page (args);
   }
   return tid;
 }
@@ -125,9 +127,10 @@ process_execute (const char *cmd_line)
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *cmd_line_tokens)
+start_process (void *cmd_line_args)
 {
-  char ** tokens = cmd_line_tokens;
+  const char ** args = (const char **) cmd_line_args;
+  const char* file_name = args[0];
   struct intr_frame if_;
   bool success;
 
@@ -136,13 +139,14 @@ start_process (void *cmd_line_tokens)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (tokens, &if_.eip, &if_.esp);
-
+  success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
-  free (tokens);
-  free_track_word();
-  if (!success) 
+  
+  if (!success) {
     thread_exit ();
+    palloc_free_page (args);
+  }else
+    push_arguments(args,&if_.esp);
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -160,7 +164,6 @@ start_process (void *cmd_line_tokens)
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
-
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
@@ -171,14 +174,13 @@ process_wait (tid_t child_tid UNUSED)
 
 /* Free the current process's resources. */
 void
-process_exit (int status)
+process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
-  printf ("%s: exit(%d)\n",cur.name,status);
   pd = cur->pagedir;
   if (pd != NULL) 
     {
@@ -285,7 +287,7 @@ static bool load_segment (struct file *file, off_t ofs, uint8_t *upage,
    and its initial stack pointer into *ESP.
    Returns true if successful, false otherwise. */
 bool
-load (const char ** tokens, void (**eip) (void), void **esp) 
+load (const char * file_name, void (**eip) (void), void **esp) 
 {
   struct thread *t = thread_current ();
   struct Elf32_Ehdr ehdr;
@@ -293,7 +295,6 @@ load (const char ** tokens, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-  char * file_name = tokens[0];
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
@@ -383,8 +384,6 @@ load (const char ** tokens, void (**eip) (void), void **esp)
   /* Set up stack. */
   if (!setup_stack (esp))
     goto done;
-  
-  push_arguments(tokens,esp);
 
   /* Start address. */
   *eip = (void (*) (void)) ehdr.e_entry;
@@ -449,15 +448,11 @@ validate_segment (const struct Elf32_Phdr *phdr, struct file *file)
 /* Loads a segment starting at offset OFS in FILE at address
    UPAGE.  In total, READ_BYTES + ZERO_BYTES bytes of virtual
    memory are initialized, as follows:
-
         - READ_BYTES bytes at UPAGE must be read from FILE
           starting at offset OFS.
-
         - ZERO_BYTES bytes at UPAGE + READ_BYTES must be zeroed.
-
    The pages initialized by this function must be writable by the
    user process if WRITABLE is true, read-only otherwise.
-
    Return true if successful, false if a memory allocation error
    or disk read error occurs. */
 static bool
