@@ -153,7 +153,7 @@ int filesize (int fd){
    Returns true if successful, false otherwise. */
 bool create (const char *file, unsigned initial_size){ 
   lock_acquire(&lock);
-  bool ret = filesys_create (file, initial_size);  /// ----------- add in filesys_create to fd_list?, add name to struct
+  bool ret = filesys_create (file, initial_size);
   lock_release(&lock);
   return ret;
 }
@@ -164,15 +164,6 @@ bool remove (const char *file){
   lock_acquire(&lock);
   bool ret = filesys_remove (file); 
   lock_release(&lock);
-  //struct list_elem *e;
-  //struct list *fd_table = &thread_current()->fd_table; 
-  // int cnt = 0;
-  //for(e = list_begin(fd_table); e != list_end(fd_table);e = list_next(e)){
-  //   struct file *f = list_entry(e, struct descriptor, fd_elem)->file;
-  //   if(f == file)
-  //     break;
-  //   cnt++;
-  // }
   return ret;
 }
 
@@ -184,12 +175,12 @@ int open (const char *file){
   struct file *f = filesys_open(file);
   lock_release(&lock);
   if(f != NULL){
-   // struct thread *cur_th = thread_current();
-   // struct descriptor *d;
-   // d->file = f;
-   // d->fd = list_size(&cur_th->fd_table) + 2;
-    // list_push_back(&cur_th->fd_table, &d->fd_elem);
-    // fd = d->fd;
+    struct thread *cur_th = thread_current();
+    struct descriptor *d;
+    d->file = f;
+    d->fd = cur_th->fileNumber++;
+    list_push_back(&cur_th->fd_table, &d->fd_elem);
+    fd = d->fd;
   }
   return fd;
 }
@@ -243,6 +234,7 @@ void close (int fd)
    lock_acquire(&lock);
    file_close (f);
    lock_release(&lock);
+   removeFromList(fd);
 }
 
 /*Runs the executable whose name is given in cmd_line */
@@ -266,6 +258,7 @@ void checkArg(int argc){
   }
 }
 
+/*get file from fd */
 file *get_file(int fd)
 {
    struct list_elem *e;
@@ -278,7 +271,18 @@ file *get_file(int fd)
   return NULL;	
 }
 
-
+void removeFromList(int fd)
+{
+   struct list_elem *e;
+   struct list *fd_table = &thread_current()->fd_table; 
+   for(e = list_begin(fd_table); e != list_end(fd_table); e = list_next(e)){
+     struct descriptor *f_descriptor = list_entry(e, struct descriptor, fd_elem);
+     if(f_descriptor->fd == fd){
+             list_remove(e);
+             return;
+     }
+   }       
+}
 
 
 

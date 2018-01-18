@@ -1,5 +1,11 @@
+#include <stdbool.h>
+#include "file.h"
+
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
+
+/* Process identifier. */
+typedef int pid_t;
 
 void syscall_init (void);
 void halt (void) ;
@@ -15,5 +21,9 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
+void checkArg(int argc);
+file *get_file(int fd);
+void removeFromList(int fd);
+
 
 #endif /* userprog/syscall.h */

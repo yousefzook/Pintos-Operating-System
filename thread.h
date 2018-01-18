@@ -4,6 +4,7 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+#include "threads/real.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -25,13 +26,11 @@ typedef int tid_t;
 #define PRI_MAX 63                      /* Highest priority. */
 
 /* A kernel thread or user process.
-
    Each thread structure is stored in its own 4 kB page.  The
    thread structure itself sits at the very bottom of the page
    (at offset 0).  The rest of the page is reserved for the
    thread's kernel stack, which grows downward from the top of
    the page (at offset 4 kB).  Here's an illustration:
-
         4 kB +---------------------------------+
              |          kernel stack           |
              |                |                |
@@ -53,22 +52,18 @@ typedef int tid_t;
              |               name              |
              |              status             |
         0 kB +---------------------------------+
-
    The upshot of this is twofold:
-
       1. First, `struct thread' must not be allowed to grow too
          big.  If it does, then there will not be enough room for
          the kernel stack.  Our base `struct thread' is only a
          few bytes in size.  It probably should stay well under 1
          kB.
-
       2. Second, kernel stacks must not be allowed to grow too
          large.  If a stack overflows, it will corrupt the thread
          state.  Thus, kernel functions should not allocate large
          structures or arrays as non-static local variables.  Use
          dynamic allocation with malloc() or palloc_get_page()
          instead.
-
    The first symptom of either of these problems will probably be
    an assertion failure in thread_current(), which checks that
    the `magic' member of the running thread's `struct thread' is
@@ -87,14 +82,21 @@ struct thread
     enum thread_status status;          /* Thread state. */
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
+    int number_of_locks;                /* number of locks that the thread acquires */
     int priority;                       /* Priority. */
-    Stack *priority_stack;               // pop top isEmpty push
-    struct lock *lock_waiting_on;              // ref to the lock that the thread is waiting on
-    struct list_elem allelem;           /* List element for all threads list. */
+    struct list priority_list;       /* stack of past priorities inherited */
+    struct thread ** obstacle_thread;     /* the obstacling thread that this thread is waiting for */
 
+    struct list_elem allelem;           /* List element for all threads list. */
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
 
+    int nice;                           /* Niceness of a thread. */
+    real recent_cpu;                    /* An estimate of the CPU time the thread has used recently. */
+
+    struct list fd_table ;              /* list of all process open file */
+    int fileNumber;
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -104,10 +106,20 @@ struct thread
     unsigned magic;                     /* Detects stack overflow. */
   };
 
+/* srtuct for file descriptor */
+struct descriptor{
+  int fd;
+  struct file *file;
+  struct list_elem fd_elem; 
+  char *name;
+};
+
 /* If false (default), use round-robin scheduler.
    If true, use multi-level feedback queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
+
+void update_load_avg(void);
 
 void thread_init (void);
 void thread_start (void);
@@ -139,5 +151,13 @@ int thread_get_nice (void);
 void thread_set_nice (int);
 int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
+
+/* Return ready list to be used in priority module.*/ 
+struct list *get_ready_list(void);
+
+/* Functions to be perform mlfqs.*/
+void update_priority_for_all_threads(void);
+void update_recent_cpu_for_all(void);
+bool is_mlfqs(void);
 
 #endif /* threads/thread.h */
