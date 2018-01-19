@@ -7,9 +7,6 @@
 #include "threads/interrupt.h"
 #include "threads/synch.h"
 #include "threads/thread.h"
-#include "threads/malloc.h"
-#include "threads/priority_scheduler.h"
-#include "tests/threads/tests.h"
   
 /* See [8254] for hardware details of the 8254 timer chip. */
 
@@ -33,32 +30,11 @@ static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
 static void real_time_delay (int64_t num, int32_t denom);
 
-static bool less_sleeper (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux UNUSED);
-
-/* wake up threads that spent at least "ticks"
-   of time sleeping */
-static void wake_up_sleepers(void);
-
-/* list of sleeping threads */
-static struct list sleepers;
-
-struct sleep_elem
-{
-  struct list_elem e;
-  struct thread * t;
-  int64_t time_to_wake;
-};
-
-
-
 /* Sets up the timer to interrupt TIMER_FREQ times per second,
    and registers the corresponding interrupt. */
 void
 timer_init (void) 
 {
-  list_init(&sleepers);
   pit_configure_channel (0, 2, TIMER_FREQ);
   intr_register_ext (0x20, timer_interrupt, "8254 Timer");
 }
@@ -113,20 +89,11 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
-  if (ticks < 1)
-    return;
   int64_t start = timer_ticks ();
-  if (timer_elapsed (start) < ticks) 
-  {
-    enum intr_level old_level;
-    old_level = intr_disable();
-    struct sleep_elem * s = malloc(sizeof(struct sleep_elem));
-    s->t = thread_current();
-    s->time_to_wake = start + ticks;
-    list_insert_ordered(&sleepers,&s->e,less_sleeper,NULL);
-    thread_block(); 
-    intr_set_level (old_level);
-  }
+
+  ASSERT (intr_get_level () == INTR_ON);
+  while (timer_elapsed (start) < ticks) 
+    thread_yield ();
 }
 
 /* Sleeps for approximately MS milliseconds.  Interrupts must be
@@ -195,20 +162,13 @@ timer_print_stats (void)
 {
   printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
+
 /* Timer interrupt handler. */
 static void
 timer_interrupt (struct intr_frame *args UNUSED)
 {
-  ticks++; 
-  wake_up_sleepers();
+  ticks++;
   thread_tick ();
-  if(is_mlfqs() && timer_ticks () % TIMER_FREQ == 0){
-    update_load_avg();
-    update_recent_cpu_for_all();
-  }
-  if(is_mlfqs() && timer_ticks () % 4 == 0)
-    update_priority_for_all_threads();
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
@@ -279,43 +239,4 @@ real_time_delay (int64_t num, int32_t denom)
      the possibility of overflow. */
   ASSERT (denom % 1000 == 0);
   busy_wait (loops_per_tick * num / 1000 * TIMER_FREQ / (denom / 1000)); 
-}
-
-void
-wake_up_sleepers()
-{
-  if(!list_empty(&sleepers))
-    {
-      struct list_elem *e;
-      bool preemption = false;
-      for(e = list_begin(&sleepers);e != list_end(&sleepers);)
-      {
-        struct sleep_elem * s = list_entry(e, struct sleep_elem, e);
-        if(ticks >= s->time_to_wake)
-        {
-          e = list_next(e);
-          list_pop_front(&sleepers);
-          int cur_pr = get_last_priority(thread_current());
-          if(get_last_priority(s->t) > cur_pr){
-            preemption = true;
-          }
-          thread_unblock(s->t);
-        }else
-          break;
-      }
-      if(preemption)
-        intr_yield_on_return();
-    }
-}
-
-bool less_sleeper (const struct list_elem *a,
-                             const struct list_elem *b,
-                             void *aux UNUSED)
-{
-
-  int t_1 = list_entry(a, struct sleep_elem, e)->time_to_wake;
-  int t_2 = list_entry(b, struct sleep_elem, e)->time_to_wake;
-  if(t_1 <= t_2)
-    return true;
-  return false;
 }

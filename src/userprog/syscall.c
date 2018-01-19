@@ -8,7 +8,7 @@
 #include "threads/synch.h"
 
 uint32_t* stack_pointer = NULL;
-struct lock lock ;
+static struct lock lock;
 
 static void syscall_handler (struct intr_frame *);
 
@@ -23,7 +23,6 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   stack_pointer = f->esp;
-  /*System calls that return a value can do so by modifying the "eax" member of struct intr_frame. */
 
   int syscall_number = (int) *stack_pointer;
   switch(syscall_number)
@@ -35,70 +34,73 @@ syscall_handler (struct intr_frame *f)
     }
     case SYS_EXIT:                   /* Terminate this process. */
     {
-      checkArg(1);
+      checkArgs(1);
       exit(*(stack_pointer + 1));
       break;
     }  
     case SYS_EXEC:                   /* Start another process. */
+    {
       break;
+    }
     case SYS_WAIT:                   /* Wait for a child process to die. */
+    {
       break;
+    }
     case SYS_CREATE:                 /* Create a file. */
     {
-      checkArg(2);
+      checkArgs(2);
       f->eax = create((const char *)(stack_pointer + 1), (unsigned )(*(stack_pointer + 2)));
       break;
     } 
     case SYS_REMOVE:                 /* Delete a file. */
     {
-      checkArg(1);
+      checkArgs(1);
       f->eax = remove((const char *)(stack_pointer + 1));
       break;
     }
     case SYS_OPEN:                   /* Open a file. */
     {
-      checkArg(1);
+      checkArgs(1);
       f->eax = open((const char *)(stack_pointer + 1));
       break;
     }
     case SYS_FILESIZE:               /* Obtain a file's size. */
     { 
-      checkArg(1);
+      checkArgs(1);
       f->eax = filesize((int)(*(stack_pointer + 1)));
       break;
     }
     case SYS_READ:                   /* Read from a file. */
     {
-      checkArg(3);
+      checkArgs(3);
       f->eax = read((int)(*(stack_pointer + 1)), *(stack_pointer + 2), (unsigned)(*(stack_pointer + 3)));
       break;
     }
     case SYS_WRITE:                  /* Write to a file. */
     {
-      checkArg(3);
+      checkArgs(3);
       f->eax = write((int)(*(stack_pointer + 1)), *(stack_pointer + 2), (unsigned)(*(stack_pointer + 3)));
       break;
     }
     case SYS_SEEK:                   /* Change position in a file. */
     {
-      checkArg(2);
+      checkArgs(2);
       seek((int)(stack_pointer + 1), (unsigned)(*(stack_pointer + 2)));
       break;
     }
     case SYS_TELL:                   /* Report current position in a file. */
     {
-      checkArg(1);
+      checkArgs(1);
       f->eax = tell((int)(*(stack_pointer + 1)));
       break;
     }
     case SYS_CLOSE:                  /* Close a file. */
     {
+      checkArgs(1);
       close((int)(*(stack_pointer + 1)));
       break;
     }
   }
- // printf ("system call!\n");
- // thread_exit ();
 }
 
 /*Terminates Pintos */
@@ -120,8 +122,7 @@ Returns the number of bytes actually written*/
 int write (int fd, const void *buffer, unsigned size) 
 {
   unsigned temp = size;
-  // get file descriptor for file
-  struct file *file = NULL;
+  // if(file == NULL) thread_exit();
   if (fd == 1){ // write to the console
     while(size > 100){
       putbuf(buffer, 100);
@@ -130,6 +131,7 @@ int write (int fd, const void *buffer, unsigned size)
     }
     putbuf(buffer, size);
   }else{
+    struct file *file = get_file(fd);
     lock_acquire(&lock);
     temp = file_write(file, buffer, size);
     lock_release(&lock);  
@@ -139,8 +141,8 @@ int write (int fd, const void *buffer, unsigned size)
 
 /* Returns the size, in bytes, of the file open as fd.*/
 int filesize (int fd){
-  struct file *file;
-  // get file from fd;
+  struct file *file = get_file(fd);
+  if(file == NULL) thread_exit();
   lock_acquire(&lock);
   int ret = (int)file_length(file); 
   lock_release(&lock);
@@ -149,9 +151,9 @@ int filesize (int fd){
 
 /* Creates a new file called file initially initial_size bytes in size. 
    Returns true if successful, false otherwise. */
-bool create (const char *file, unsigned initial_size){
+bool create (const char *file, unsigned initial_size){ 
   lock_acquire(&lock);
-  bool ret = filesys_create (file, initial_size); 
+  bool ret = filesys_create (file, initial_size);
   lock_release(&lock);
   return ret;
 }
@@ -162,15 +164,6 @@ bool remove (const char *file){
   lock_acquire(&lock);
   bool ret = filesys_remove (file); 
   lock_release(&lock);
-  // struct list_elem *e;
-  // struct list *fd_table = &thread_current()->fd_table; 
-  // int cnt = 0;
-  // for(e = list_begin(fd_table); e != list_end(fd_table);e = list_next(e)){
-  //   struct file *f = list_entry(e, struct descriptor, fd_elem)->file;
-  //   if(f == file)
-  //     break;
-  //   cnt++;
-  // }
   return ret;
 }
 
@@ -182,12 +175,12 @@ int open (const char *file){
   struct file *f = filesys_open(file);
   lock_release(&lock);
   if(f != NULL){
-    // struct thread *cur_th = thread_current();
-    // struct descriptor *d;
-    // d->file = f;
-    // d->fd = list_size(&cur_th->fd_table)+2;
-    // list_push_back(&cur_th->fd_table, &d->fd_elem);
-    // fd = d->fd;
+    struct thread *cur_th = thread_current();
+    struct descriptor *d;
+    d->file = f;
+    d->fd = cur_th->fileNumber++;
+    list_push_back(&cur_th->fd_table, &d->fd_elem);
+    fd = d->fd;
   }
   return fd;
 }
@@ -198,15 +191,14 @@ int read (int fd, void *buffer, unsigned size)
 {
   if(fd == 0)
   {
-      char *line = (char*) buffer;
-      unsigned  i;
-    for (i = 0; i < size; i++) // check valid?
-    {
+    char *line = (char*) buffer;
+    unsigned  i;
+    for (i = 0; i < size; i++)
       line[i] = input_getc();
-    }
-        return i;
+    return i;
   }
-  struct file *f = NULL; // get file, locks
+  struct file *f = get_file(fd);
+  if(f == NULL) thread_exit();
   lock_acquire(&lock);
   int ret = file_read(f, buffer, size);
   lock_release(&lock);
@@ -216,7 +208,8 @@ int read (int fd, void *buffer, unsigned size)
 /*Changes the next byte to be read or written in open file fd to position */
 void seek (int fd, unsigned position)
 {
-   struct file *f = NULL; //get file, locks
+   struct file *f = get_file(fd);
+   if(f == NULL) thread_exit();
    lock_acquire(&lock);
    file_seek(f, position);
    lock_release(&lock);
@@ -225,7 +218,8 @@ void seek (int fd, unsigned position)
 /*Returns the position of the next byte to be read or written in open file fd */
 unsigned tell (int fd)
 {
-   struct file *f = NULL; //get file;
+   struct file *f = get_file(fd);
+   if(f == NULL) thread_exit();
    lock_acquire(&lock);
    unsigned ret = file_tell(f);
    lock_release(&lock);
@@ -235,20 +229,57 @@ unsigned tell (int fd)
 /*Closes file descriptor fd */
 void close (int fd)
 {
-   struct file *f = NULL; //get file;
+   struct file *f = get_file(fd);
+   if(f == NULL) thread_exit();
    lock_acquire(&lock);
    file_close (f);
    lock_release(&lock);
+   removeFromList(fd);
 }
 
+/*Runs the executable whose name is given in cmd_line */
+pid_t exec (const char *cmd_line)
+{
 
-// chdck>> opening a null file
+}
+
+/*Waits for a child process pid and retrieves the child's exit status */
+int wait (pid_t pid)
+{
+    return process_wait(pid);
+}
+
 /* Check arguments of syscall, terminate if invalid*/
-void checkArg(int argc){
+void checkArgs(int argc){
   int i;
   for (i = 1; i <= argc; i++){
-    if(stack_pointer+i == NULL)
+    if(stack_pointer + i == NULL)
       thread_exit();
   }
 }
-// fd, CHECK FILE EXISTENCE,...
+
+/*get file from fd */
+struct file *get_file(int fd)
+{
+   struct list_elem *e;
+   struct list *fd_table = &thread_current()->fd_table; 
+   for(e = list_begin(fd_table); e != list_end(fd_table); e = list_next(e)){
+     struct descriptor *f_descriptor = list_entry(e, struct descriptor, fd_elem);
+     if(f_descriptor->fd == fd)
+        return f_descriptor->file;
+  }
+  return NULL;  
+}
+
+void removeFromList(int fd)
+{
+   struct list_elem *e;
+   struct list *fd_table = &thread_current()->fd_table; 
+   for(e = list_begin(fd_table); e != list_end(fd_table); e = list_next(e)){
+     struct descriptor *f_descriptor = list_entry(e, struct descriptor, fd_elem);
+     if(f_descriptor->fd == fd){
+             list_remove(e);
+             return;
+     }
+   }       
+}

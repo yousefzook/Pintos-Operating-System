@@ -1,5 +1,5 @@
 #include <stdbool.h>
-
+#include "filesys/file.h"
 
 #ifndef USERPROG_SYSCALL_H
 #define USERPROG_SYSCALL_H
@@ -21,7 +21,9 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
-void checkArg(int argc);
+void checkArgs(int argc);
+struct file *get_file(int fd);
+void removeFromList(int fd);
 
 
 #endif /* userprog/syscall.h */
