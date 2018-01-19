@@ -110,6 +110,7 @@ tokenize(char *cmd_line){
    }
    return tokens;
 }
+
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -119,7 +120,7 @@ process_execute (const char *cmd_line)
 {
   char *cmd_line_copy,*file_name;
   tid_t tid;
-
+  struct thread *cur_th = thread_current();
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   cmd_line_copy = palloc_get_page (0);
@@ -166,6 +167,8 @@ start_process (void *cmd_line_args)
   }else
     push_arguments(args,&if_.esp);
 
+  struct thread *t = thread_current();
+  sema_up(&t->wait_sema);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
@@ -183,13 +186,22 @@ start_process (void *cmd_line_args)
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
-   This function will be implemented in problem 2-2.  For now, it
-   does nothing. */
+   This function will be implemented in problem 2-2. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  while(1);
-  return -1;
+  // while(1);
+
+  struct thread * t = get_thread(child_tid);
+
+
+  if(child_tid < 0 || t == NULL || t->status == THREAD_DYING)
+    return -1;
+
+  sema_down(&t->wait_sema);
+  
+  return 0;
+
 }
 
 /* Free the current process's resources. */

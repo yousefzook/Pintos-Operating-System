@@ -471,6 +471,7 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
   list_init(&t->fd_table);
+  sema_init(&t->wait_sema, 0);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -583,6 +584,23 @@ allocate_tid (void)
 
   return tid;
 }
+
+
+/* return thread with given tid , null if not found. */
+struct thread * get_thread(tid_t tid){
+  
+  struct list_elem *tid_elem;
+  struct thread *t = NULL;
+  for (tid_elem = list_begin (&all_list); tid_elem != list_end (&all_list); tid_elem = list_next (tid_elem))
+    {
+      t = list_entry (tid_elem, struct thread, allelem);
+      if (t->tid == tid)
+        return t;
+    }
+  return NULL;
+}
+
+
 
 /* Offset of `stack' member within `struct thread'.
    Used by switch.S, which can't figure it out on its own. */

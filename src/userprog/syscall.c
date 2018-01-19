@@ -7,6 +7,9 @@
 #include "filesys/filesys.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "devices/input.h"
+#include "devices/shutdown.h"
+#include "process.h"
 
 uint32_t* stack_pointer = NULL;
 static struct lock lock;
@@ -23,14 +26,17 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f) 
 {
+
   stack_pointer = f->esp;
 
-  if(is_user_vaddr(stack_pointer))
+  printf("\n\nesp = %#08x \n\n",stack_pointer);
+  if(!is_user_vaddr(stack_pointer))
     exit(-1);
 
   int syscall_number = (int) *stack_pointer;
   switch(syscall_number)
   { 
+
     case SYS_HALT:                   /* Halt the operating system. */
     {
       halt();
@@ -125,6 +131,8 @@ void exit (int status)
 Returns the number of bytes actually written*/
 int write (int fd, const void *buffer, unsigned size) 
 {
+
+  printf("\n\n fd: ___ %d ___ \n\n\n",fd);  
   unsigned temp = size;
   // if(file == NULL) thread_exit();
   lock_acquire(&lock);
@@ -196,7 +204,7 @@ bool remove (const char *file){
 int open (const char *file){
   
   int fd = -1;
-  
+
   if(file != NULL){
 
     /* If not valid address, terminate the process*/
@@ -214,6 +222,7 @@ int open (const char *file){
     list_push_back(&cur_th->fd_table, &d->fd_elem);
     fd = d->fd;
   }
+
   return fd;
 }
 
@@ -221,6 +230,7 @@ int open (const char *file){
 Returns the number of bytes actually read */
 int read (int fd, void *buffer, unsigned size)
 {
+  
 
   lock_acquire(&lock);
 
