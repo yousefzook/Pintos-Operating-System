@@ -6,6 +6,7 @@
 #include "filesys/file.h"
 #include "filesys/filesys.h"
 #include "threads/synch.h"
+#include "threads/vaddr.h"
 
 uint32_t* stack_pointer = NULL;
 static struct lock lock;
@@ -23,6 +24,9 @@ static void
 syscall_handler (struct intr_frame *f) 
 {
   stack_pointer = f->esp;
+
+  if(is_user_vaddr(stack_pointer))
+    exit(-1);
 
   int syscall_number = (int) *stack_pointer;
   switch(syscall_number)
@@ -123,6 +127,13 @@ int write (int fd, const void *buffer, unsigned size)
 {
   unsigned temp = size;
   // if(file == NULL) thread_exit();
+  lock_acquire(&lock);
+  
+  if (!is_user_vaddr (buffer) || !is_user_vaddr(buffer+size)){
+    lock_release (&lock);
+    exit (-1);
+  }
+
   if (fd == 1){ // write to the console
     while(size > 100){
       putbuf(buffer, 100);
@@ -130,12 +141,14 @@ int write (int fd, const void *buffer, unsigned size)
       buffer = buffer + 100;
     }
     putbuf(buffer, size);
+  }else if(fd == 0){
+    lock_release(&lock);  
+    return 0;
   }else{
     struct file *file = get_file(fd);
-    lock_acquire(&lock);
     temp = file_write(file, buffer, size);
-    lock_release(&lock);  
   }
+  lock_release(&lock);  
   return temp; 
 }
 
@@ -152,6 +165,13 @@ int filesize (int fd){
 /* Creates a new file called file initially initial_size bytes in size. 
    Returns true if successful, false otherwise. */
 bool create (const char *file, unsigned initial_size){ 
+  
+  if(file == NULL)
+    return false;
+
+  if (!is_user_vaddr(file))
+    exit(-1);
+
   lock_acquire(&lock);
   bool ret = filesys_create (file, initial_size);
   lock_release(&lock);
@@ -161,6 +181,10 @@ bool create (const char *file, unsigned initial_size){
 /* Deletes the file called file. Returns true if successful, false otherwise.*/
 bool remove (const char *file){
   // implement file descriptor which owned by processes already open the file
+  
+  if (!is_user_vaddr(file))
+    exit(-1);
+
   lock_acquire(&lock);
   bool ret = filesys_remove (file); 
   lock_release(&lock);
@@ -170,11 +194,19 @@ bool remove (const char *file){
 /* Opens the file called file. Returns a nonnegative integer handle called 
    a "file descriptor" (fd), or -1 if the file could not be opened.*/
 int open (const char *file){
+  
   int fd = -1;
-  lock_acquire(&lock);
-  struct file *f = filesys_open(file);
-  lock_release(&lock);
-  if(f != NULL){
+  
+  if(file != NULL){
+
+    /* If not valid address, terminate the process*/
+    if(! is_user_vaddr(file))
+      exit(-1);
+
+    lock_acquire(&lock);
+    struct file *f = filesys_open(file);
+    lock_release(&lock);
+
     struct thread *cur_th = thread_current();
     struct descriptor *d;
     d->file = f;
@@ -189,6 +221,15 @@ int open (const char *file){
 Returns the number of bytes actually read */
 int read (int fd, void *buffer, unsigned size)
 {
+
+  lock_acquire(&lock);
+
+  if(buffer == NULL)
+    return 0;
+
+  if (!is_user_vaddr(buffer))
+    exit(-1);
+
   if(fd == 0)
   {
     char *line = (char*) buffer;
@@ -199,7 +240,6 @@ int read (int fd, void *buffer, unsigned size)
   }
   struct file *f = get_file(fd);
   if(f == NULL) thread_exit();
-  lock_acquire(&lock);
   int ret = file_read(f, buffer, size);
   lock_release(&lock);
   return ret;
@@ -208,9 +248,9 @@ int read (int fd, void *buffer, unsigned size)
 /*Changes the next byte to be read or written in open file fd to position */
 void seek (int fd, unsigned position)
 {
+   lock_acquire(&lock);
    struct file *f = get_file(fd);
    if(f == NULL) thread_exit();
-   lock_acquire(&lock);
    file_seek(f, position);
    lock_release(&lock);
 }
@@ -259,7 +299,7 @@ void checkArgs(int argc){
 }
 
 /*get file from fd */
-struct file *get_file(int fd)
+struct file * get_file(int fd)
 {
    struct list_elem *e;
    struct list *fd_table = &thread_current()->fd_table; 

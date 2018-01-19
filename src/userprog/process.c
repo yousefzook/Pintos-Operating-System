@@ -26,27 +26,35 @@ static thread_func start_process NO_RETURN;
 static bool load (const char * file_name, void (**eip) (void), void **esp);
 
 
-static int get_numof_tokens(char ** tokens){
+static int 
+get_numof_tokens(char ** tokens){
   int i =0;
   while(tokens[i] !=NULL)
     i++;
   return i;
 }
 
-static bool check_possible_overflow(char ** arguments){
-  int i = get_numof_tokens(arguments);
-  if((2*i+1) >= PGSIZE)
+static bool 
+check_possible_overflow(char ** arguments){
+  int n = get_numof_tokens(arguments);
+  int total_length = 0;
+  for (int i = 0; i < n; ++i)
+  {
+    total_length += strlen(arguments[i]) + 1;
+  }
+  int needed_page_size = (total_length/4)+n+3;
+  if(needed_page_size > PGSIZE)
     return true;
   return false;
 }
 
-static void push_arguments(char ** arguments,void **esp){
+static void 
+push_arguments(char ** arguments,void **esp){
 
   int len = get_numof_tokens(arguments);
-  void *addr[len+1]; 
-  addr[len] = (uint32_t) NULL;
+  void *addr[len]; 
   int r_index = len-1;
-  void * stack_pointer = *esp;
+  char * stack_pointer = *esp;
   int arg_len;
   int remain = 0;
   /* set arguments data */
@@ -56,26 +64,36 @@ static void push_arguments(char ** arguments,void **esp){
     stack_pointer -= arg_len;
     memcpy(stack_pointer, arguments[r_index], arg_len);
     addr[r_index]= stack_pointer;
-    printf("%#08x: %s\n", addr[r_index],arguments[r_index]);   
+    // printf("%#08x: %s\n", addr[r_index],stack_pointer);   
     r_index--;
   }
   /* word align */
   stack_pointer -= WORD_SIZE - remain;
+  // if(remain !=0)
+    // printf("%#08x: %d\n", stack_pointer,0); 
+  /* Null argument */
+   stack_pointer -= WORD_SIZE;
+  *((uint32_t*) stack_pointer) = (uint32_t) NULL;
+  // printf("%#08x: %d\n", stack_pointer,0);
   /* set arguments' adresses */
-  r_index = len;
+  r_index = len-1;
   while(r_index >= 0){
     stack_pointer-= WORD_SIZE;
-    *((void**) stack_pointer)= addr[r_index];
-    printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
+    *((char**) stack_pointer)= addr[r_index];
+    // printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
     r_index--;
   }
+  /* set argv address */ 
+  stack_pointer-= WORD_SIZE;
+  *((void**) stack_pointer) = stack_pointer + WORD_SIZE;
+  // printf("%#08x: %#08x\n", stack_pointer,stack_pointer + WORD_SIZE);
   /* set argc & return value */ 
   stack_pointer-= WORD_SIZE;
   *((int*)stack_pointer) = len;
-  printf("%#08x: %d\n", stack_pointer,len);  
+  // printf("%#08x: %d\n", stack_pointer,len);  
   stack_pointer-= WORD_SIZE;
-  *((int*)stack_pointer) = 0;
-  printf("%#08x: %d\n", stack_pointer,0); 
+  *((uint32_t*)stack_pointer) = 0;
+  // printf("%#08x: %d\n", stack_pointer,0); 
   *esp = stack_pointer;
 }
 
@@ -154,6 +172,7 @@ start_process (void *cmd_line_args)
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
+  // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run Process\n");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -167,7 +186,7 @@ start_process (void *cmd_line_args)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid ) 
+process_wait (tid_t child_tid UNUSED) 
 {
   while(1);
   return -1;
