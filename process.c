@@ -64,36 +64,36 @@ push_arguments(char ** arguments,void **esp){
     stack_pointer -= arg_len;
     memcpy(stack_pointer, arguments[r_index], arg_len);
     addr[r_index]= stack_pointer;
-    printf("%#08x: %s\n", addr[r_index],stack_pointer);   
+   // printf("%#08x: %s\n", addr[r_index],stack_pointer);   
     r_index--;
   }
   /* word align */
   stack_pointer -= WORD_SIZE - remain;
-  if(remain !=0)
-    printf("%#08x: %d\n", stack_pointer,0); 
+  //if(remain !=0)
+   // printf("%#08x: %d\n", stack_pointer,0); 
   /* Null argument */
    stack_pointer -= WORD_SIZE;
   *((uint32_t*) stack_pointer) = (uint32_t) NULL;
-  printf("%#08x: %d\n", stack_pointer,0);
+  //printf("%#08x: %d\n", stack_pointer,0);
   /* set arguments' adresses */
   r_index = len-1;
   while(r_index >= 0){
     stack_pointer-= WORD_SIZE;
     *((char**) stack_pointer)= addr[r_index];
-    printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
+    //printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
     r_index--;
   }
   /* set argv address */ 
   stack_pointer-= WORD_SIZE;
-  *((void**) stack_pointer) = stack_pointer + WORD_SIZE;
-  printf("%#08x: %#08x\n", stack_pointer,stack_pointer + WORD_SIZE);
+  *((void **) stack_pointer) = stack_pointer + WORD_SIZE;
+  //printf("%#08x: %#08x\n", stack_pointer,stack_pointer + WORD_SIZE);
   /* set argc & return value */ 
   stack_pointer-= WORD_SIZE;
   *((int*)stack_pointer) = len;
-  printf("%#08x: %d\n", stack_pointer,len);  
+  //printf("%#08x: %d\n", stack_pointer,len);  
   stack_pointer-= WORD_SIZE;
-  *((uint32_t*)stack_pointer) = 0;
-  printf("%#08x: %d\n", stack_pointer,0); 
+  *((int*)stack_pointer) = 0;
+  //printf("%#08x: %d\n", stack_pointer,0); 
   *esp = stack_pointer;
 }
 
@@ -147,8 +147,8 @@ process_execute (const char *cmd_line)
 static void
 start_process (void *cmd_line_args)
 {
-  const char ** args = (const char **) cmd_line_args;
-  const char* file_name = args[0];
+  char ** args = (char **) cmd_line_args;
+  const char* file_name = (const char*) args[0];
   struct intr_frame if_;
   bool success;
 
@@ -160,19 +160,18 @@ start_process (void *cmd_line_args)
   success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
   
-  if (!success) {
+  if (!success)
     thread_exit ();
-    palloc_free_page (args);
-  }else
+  else
     push_arguments(args,&if_.esp);
-
+  palloc_free_page (args);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run Process\n");
+  //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run Process\n");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
@@ -186,9 +185,16 @@ start_process (void *cmd_line_args)
    This function will be implemented in problem 2-2.  For now, it
    does nothing. */
 int
-process_wait (tid_t child_tid UNUSED) 
+process_wait (tid_t child_tid) 
 {
-  return -1;
+
+  struct thread * t = get_thread(child_tid);
+  if(child_tid < 0 || t == NULL || t->status == THREAD_DYING)
+    return -1;
+
+  sema_down(&t->wait_sema);  
+  return 0;
+
 }
 
 /* Free the current process's resources. */
