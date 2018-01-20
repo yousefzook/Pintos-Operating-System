@@ -1,5 +1,7 @@
 #include "userprog/syscall.h"
+#include "userprog/pagedir.h"
 #include <stdio.h>
+#include <string.h>
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
@@ -11,7 +13,6 @@
 #include "devices/input.h"
 #include "devices/shutdown.h"
 #include "process.h"
-
 
 
 static void syscall_handler (struct intr_frame *);
@@ -37,7 +38,7 @@ syscall_handler (struct intr_frame *f)
   stack_pointer = f->esp;
   check_pointer(stack_pointer);
   int syscall_number = (int) *stack_pointer;
-  //printf("syscall number : %d\n",*((int*)f->esp));
+  //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> %d\n", syscall_number);
 
   switch(syscall_number)
   { 
@@ -54,22 +55,26 @@ syscall_handler (struct intr_frame *f)
     }  
     case SYS_EXEC:                   /* Start another process. */
     {
+      check_args(1);
+      f->eax = exec((const char *)*(stack_pointer + 1));
       break;
     }
     case SYS_WAIT:                   /* Wait for a child process to die. */
     {
+      check_args(1);
+      f->eax = wait(*(stack_pointer + 1));
       break;
     }
     case SYS_CREATE:                 /* Create a file. */
     {
       check_args(2);
-      f->eax = create((const char *)(stack_pointer + 1), (unsigned )(*(stack_pointer + 2)));
+      f->eax = create((const char *)*(stack_pointer + 1), (unsigned )(*(stack_pointer + 2)));
       break;
     } 
     case SYS_REMOVE:                 /* Delete a file. */
     {
       check_args(1);
-      f->eax = remove((const char *)(stack_pointer + 1));
+      f->eax = remove((const char *)*(stack_pointer + 1));
       break;
     }
     case SYS_OPEN:                   /* Open a file. */
@@ -128,13 +133,23 @@ void exit (int status)
 {
   struct thread *t = thread_current();
   printf ("%s: exit(%d)\n",t->name,status);
+  // printf(">>>>>>>>>>>>>>>>> now exiting\n");
+  if(t->parent_list != NULL){
+    // printf(">>>>>>>>>>>>>>>>>>>Parent is in memory\n");
+    get_child(t->parent_list,t->tid)->status = status;
+  }
   thread_exit();
 }
 
 /*Runs the executable whose name is given in cmd_line */
 pid_t exec (const char *cmd_line)
 {
-
+ // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ONe pushed\n");
+ if(cmd_line == NULL) exit(-1);
+ void * v = (void *)cmd_line;
+ check_pointer(v);
+ pid_t id = process_execute(cmd_line);
+ return id;
 }
 
 /*Waits for a child process pid and retrieves the child's exit status */
@@ -146,7 +161,9 @@ int wait (pid_t pid)
 /* Creates a new file called file initially initial_size bytes in size. 
    Returns true if successful, false otherwise. */
 bool create (const char *file, unsigned initial_size){ 
-  
+  if(file == NULL) exit(-1);
+  void * v = (void *)file;
+  check_pointer(v);
   lock_acquire(&lock);
   bool ret = filesys_create (file, initial_size);
   lock_release(&lock);
@@ -155,8 +172,9 @@ bool create (const char *file, unsigned initial_size){
 
 /* Deletes the file called file. Returns true if successful, false otherwise.*/
 bool remove (const char *file){
-  // implement file descriptor which owned by processes already open the file
-
+  if(file == NULL) exit(-1);
+  void * v = (void *)file;
+  check_pointer(v);
   lock_acquire(&lock);
   bool ret = filesys_remove (file); 
   lock_release(&lock);
@@ -167,13 +185,15 @@ bool remove (const char *file){
    a "file descriptor" (fd), or -1 if the file could not be opened.*/
 int open (const char *file){
   
-  printf("Open called: %s\n",file);
+  if(file == NULL) exit(-1);
+  void * v = (void *)file;
+  check_pointer(v);
   int fd = -1;
   lock_acquire(&lock);
   struct file *f = filesys_open(file);
   lock_release(&lock);
   if(f == NULL){
-    printf(">>>>>>>>>>>>>>>>>>>>>>>>>Open: File not Found %d\n",fd );
+    //printf(">>>>>>>>>>>>>>>>>>>>>>>>>Open: File not Found %d\n",fd );
      return fd =-1;
   }
   fd = add_file(f);
@@ -194,6 +214,9 @@ int filesize (int fd){
 Returns the number of bytes actually read */
 int read (int fd, void *buffer, unsigned size)
 {
+  if(buffer == NULL) exit(-1);
+  void * v = (void *)buffer;
+  check_pointer(v);
   lock_acquire(&lock); 
   if(fd == 0)
   {
@@ -215,7 +238,9 @@ int read (int fd, void *buffer, unsigned size)
 Returns the number of bytes actually written*/
 int write (int fd, const void *buffer, unsigned size) 
 {
-  //printf("Write called: %d\n",fd);
+  if(buffer == NULL) exit(-1);
+  void * v = (void *)buffer;
+  check_pointer(v);
   unsigned temp = size;
   lock_acquire(&lock);
   
@@ -238,7 +263,7 @@ int write (int fd, const void *buffer, unsigned size)
   }else{
     struct file *file = get_file(fd);
     if(file == NULL){
-      printf(">>>>>>>>>>>>>>>>>>>>>>>>>Write: File not Found %d\n",fd );
+      //printf(">>>>>>>>>>>>>>>>>>>>>>>>>Write: File not Found %d\n",fd );
       lock_release(&lock);  
       return 0;
     }
@@ -282,8 +307,8 @@ void close (int fd)
 
 /* check if valid user pointer */
 static void check_pointer(void * ptr){
-  
-  if (!is_user_vaddr (ptr)){
+  if (!is_user_vaddr (ptr) || pagedir_get_page(thread_current()->pagedir,
+      ptr) == NULL){
     if(lock_held_by_current_thread(&lock))
       lock_release (&lock);
     exit (-1);

@@ -21,10 +21,24 @@
 
 #define MAX_NUM_OF_ARGS 20
 #define WORD_SIZE 4
+#define MAX_ARG_LENGTH 20
 
 static thread_func start_process NO_RETURN;
 static bool load (const char * file_name, void (**eip) (void), void **esp);
+static struct child_process* make_child(void);
 
+
+
+static struct child_process*
+make_child()
+{
+ struct child_process *child = malloc(sizeof(struct child_process));
+ child->wait = false;
+ child->status = EXECUTING;
+ struct list *list = &thread_current()->children_list;
+ list_push_back(list,&child->elem);
+ return child;
+}
 
 static int 
 get_numof_tokens(char ** tokens){
@@ -40,9 +54,11 @@ check_possible_overflow(char ** arguments){
   int total_length = 0;
   for (int i = 0; i < n; ++i)
   {
-    total_length += strlen(arguments[i]) + 1;
+    printf(">>>>>>>>>>>>>>>>>>>> name:\n");
+    printf("%s\n",arguments[i] );
+    total_length += strnlen(arguments[i],MAX_ARG_LENGTH) + 1;
   }
-  int needed_page_size = (total_length/4)+n+3;
+  int needed_page_size = (total_length/4)+n+4;
   if(needed_page_size > PGSIZE)
     return true;
   return false;
@@ -132,9 +148,13 @@ process_execute (const char *cmd_line)
   if(check_possible_overflow(args))
     return TID_ERROR;
   file_name = args[0];
-
+  //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> ONe execute\n");
   /* Create a new thread to execute FILE_NAME. */
+  struct list * l  = &thread_current()->children_list;
+  struct child_process * ch =  make_child();
   tid = thread_create (file_name, PRI_DEFAULT, start_process, args);
+  ch->tid = tid;
+  get_thread(tid)->parent_list = l;
   if (tid == TID_ERROR){
     palloc_free_page (cmd_line_copy);
     palloc_free_page (args);
@@ -176,6 +196,23 @@ start_process (void *cmd_line_args)
   NOT_REACHED ();
 }
 
+
+/* return thread with given tid , null if not found. */
+struct child_process * get_child(struct list * children,tid_t tid)
+{  
+  struct list_elem *tid_elem;
+  struct child_process *ch = NULL;
+  for (tid_elem = list_begin (children); tid_elem != list_end (children); tid_elem = list_next (tid_elem))
+    {
+      ch = list_entry (tid_elem, struct child_process, elem);
+      if (ch->tid == tid)
+        return ch;
+    }
+  return NULL;
+}
+
+
+
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
    exception), returns -1.  If TID is invalid or if it was not a
@@ -187,14 +224,16 @@ start_process (void *cmd_line_args)
 int
 process_wait (tid_t child_tid) 
 {
-
-  struct thread * t = get_thread(child_tid);
-  if(child_tid < 0 || t == NULL || t->status == THREAD_DYING)
+  struct child_process * child = get_child(&thread_current()->children_list,child_tid);
+  if(child_tid < 0 || child == NULL || child->wait == true)
     return -1;
-
-  sema_down(&t->wait_sema);  
-  return 0;
-
+  child->wait = true;
+  // printf(">>>>>>>>>>>>>>>>> child->status before %d\n",child->status );
+  while(child->status == EXECUTING){
+    barrier();
+  }
+  // printf(">>>>>>>>>>>>>>>>> child->status after %d\n",child->status );
+  return child->status;
 }
 
 /* Free the current process's resources. */
