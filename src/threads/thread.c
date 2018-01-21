@@ -188,9 +188,9 @@ thread_create (const char *name, int priority,
   t = palloc_get_page (PAL_ZERO);
   if (t == NULL)
     return TID_ERROR;
-
   /* Initialize thread. */
   init_thread (t, name, priority,thread_get_nice());
+  t->parent = thread_current();
   tid = t->tid = allocate_tid ();
 
   /* Prepare thread for first run by initializing its stack.
@@ -318,7 +318,6 @@ thread_yield (void)
 {
   struct thread *cur = thread_current ();
   enum intr_level old_level;
-  
   ASSERT (!intr_context ());
 
   old_level = intr_disable ();
@@ -477,7 +476,7 @@ init_thread (struct thread *t, const char *name, int priority, int nice_by_100)
   ASSERT (t != NULL);
   ASSERT (PRI_MIN <= priority && priority <= PRI_MAX);
   ASSERT (name != NULL);
-
+  
   memset (t, 0, sizeof *t);
   t->status = THREAD_BLOCKED;
   strlcpy (t->name, name, sizeof t->name);
@@ -488,7 +487,11 @@ init_thread (struct thread *t, const char *name, int priority, int nice_by_100)
   t->obstacle_thread = NULL;
   t->nice = nice_by_100/100;
   t->recent_cpu = int_to_real(0);
+  t->fileNumber = 2;
+  list_init(&t->children_list);
+  list_init(&t->fd_table);
   list_init(&t->priority_list);
+  sema_init(&t->sema_wait,0);
   list_push_back (&all_list, &t->allelem);
 }
 
@@ -601,7 +604,6 @@ allocate_tid (void)
    Used by switch.S, which can't figure it out on its own. */
 uint32_t thread_stack_ofs = offsetof (struct thread, stack);
 
-
 /* Update priority for all ready threads.
    priority = PRI_MAX - (recent_cpu / 4) - (nice * 2) */
 void update_priority_for_all_threads(void)
@@ -682,4 +684,17 @@ struct list *get_ready_list(){
 
 bool is_mlfqs(){
   return thread_mlfqs;
+}
+/* return thread with given tid , null if not found. */
+struct thread * get_thread(tid_t tid){
+  
+  struct list_elem *tid_elem;
+  struct thread *t = NULL;
+  for (tid_elem = list_begin (&all_list); tid_elem != list_end (&all_list); tid_elem = list_next (tid_elem))
+    {
+      t = list_entry (tid_elem, struct thread, allelem);
+      if (t->tid == tid)
+        return t;
+    }
+  return NULL;
 }
