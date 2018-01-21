@@ -38,6 +38,7 @@ syscall_handler (struct intr_frame *f)
   stack_pointer = f->esp;
   check_pointer(stack_pointer);
   int syscall_number = (int) *stack_pointer;
+  //printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>sycal number %d\n", syscall_number);
 
   switch(syscall_number)
   { 
@@ -137,6 +138,7 @@ void exit (int status)
     if(ch!= NULL){
       ch->status = status;
     }
+    sema_up(&t->parent->sema_wait);
   }
   t->exit_status = true;
   thread_exit();

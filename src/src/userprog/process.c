@@ -87,7 +87,7 @@ push_arguments(char ** arguments,void **esp){
     remain = (remain+arg_len)%WORD_SIZE;
     stack_pointer -= arg_len;
     memcpy(stack_pointer, arguments[r_index], arg_len);
-    addr[r_index]= stack_pointer;
+    addr[r_index]= stack_pointer;  
     r_index--;
   }
   /* word align */
@@ -117,13 +117,14 @@ static char**
 tokenize(char *cmd_line){
   int i = 0;
   char *token, *save_ptr;
-  char** tokens = palloc_get_page (0);
-   for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
+  char** tokens = palloc_get_page (PAL_USER);
+  for (token = strtok_r (cmd_line, " ", &save_ptr); token != NULL;
         token = strtok_r (NULL, " ", &save_ptr))
    {
      tokens[i] = token;
      i++;
    }
+   tokens[i] = NULL;
    return tokens;
 }
 
@@ -134,12 +135,13 @@ tokenize(char *cmd_line){
 tid_t
 process_execute (const char *cmd_line) 
 {
+  //printf("\n\n%s\n",cmd_line );
   char *cmd_line_copy,*file_name;
   tid_t tid;
 
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
-  cmd_line_copy = palloc_get_page (0);
+  cmd_line_copy = palloc_get_page (PAL_USER);
   if (cmd_line_copy == NULL)
     return TID_ERROR;
   strlcpy (cmd_line_copy, cmd_line, PGSIZE);
@@ -152,22 +154,24 @@ process_execute (const char *cmd_line)
     return TID_ERROR;
   }
   file_name = args[0];
+  //printf(">>>>>>>>>>>>>>> tokens[0] : %s\n",file_name );
   /* initialize auxilary arument to the new thread */
-  struct arg aux_arg;
-  aux_arg.args = args;
-  aux_arg.loaded = false;
+  struct arg *aux_arg = palloc_get_page (PAL_USER);
+  aux_arg->args = args;
+  aux_arg->loaded = false;
   /* Create a new thread to execute FILE_NAME. */
   struct child_process *ch = make_child(-3);
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, &aux_arg);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, aux_arg);
   ch->tid = tid;
   sema_down(&thread_current()->sema_wait);
-  if(!aux_arg.loaded)
+  if(!aux_arg->loaded)
     tid = TID_ERROR;
-
+  //printf("<>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> tid:%d\n",tid );
   /* check error */
   if (tid == TID_ERROR){
     palloc_free_page (cmd_line_copy);
     palloc_free_page (args);
+    //palloc_free_page(aux_arg);
   }
   /* set child process tid and parent list. */
   return tid;
@@ -242,13 +246,12 @@ struct child_process * get_child(struct list * children,tid_t tid)
 int
 process_wait (tid_t child_tid) 
 {
-  struct child_process * child = get_child(&thread_current()->children_list,child_tid);
+  struct thread *cur = thread_current();
+  struct child_process * child = get_child(&cur->children_list,child_tid);
   if(child_tid < 0 || child == NULL || child->wait == true)
     return -1;
   child->wait = true;
-  while(child->status == EXECUTING){
-    barrier();
-  }
+  sema_down(&cur->sema_wait);
   return child->status;
 }
 
@@ -295,7 +298,7 @@ process_activate (void)
      interrupts. */
   tss_update ();
 }
-
+
 /* We load ELF binaries.  The following definitions are taken
    from the ELF specification, [ELF1], more-or-less verbatim.  */
 
@@ -401,6 +404,7 @@ load (const char * file_name, void (**eip) (void), void **esp)
       || ehdr.e_phentsize != sizeof (struct Elf32_Phdr)
       || ehdr.e_phnum > 1024) 
     {
+      printf ("load: %s: error loading executable\n", file_name);
       goto done; 
     }
 
