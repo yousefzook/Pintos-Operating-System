@@ -16,7 +16,7 @@ SECTIONS
   .rodata : { *(.rodata) *(.rodata.*) 
 	      . = ALIGN(0x1000); 
 	      _end_kernel_text = .; }
-  .data : { *(.data) 
+  .data : { *(.data)  *(.data.*) 
 	    _signature = .; LONG(0xaa55aa55) }
 
   /* BSS (zero-initialized data) is after everything else. */

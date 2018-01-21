@@ -8,6 +8,7 @@
 #include "userprog/gdt.h"
 #include "userprog/pagedir.h"
 #include "userprog/tss.h"
+#include "userprog/syscall.h"
 #include "filesys/directory.h"
 #include "filesys/file.h"
 #include "filesys/filesys.h"
@@ -18,13 +19,37 @@
 #include "threads/malloc.h"
 #include "threads/thread.h"
 #include "threads/vaddr.h"
+#include "threads/synch.h"
 
 #define MAX_NUM_OF_ARGS 20
 #define WORD_SIZE 4
+#define MAX_ARG_LENGTH 20
 
 static thread_func start_process NO_RETURN;
 static bool load (const char * file_name, void (**eip) (void), void **esp);
 
+
+
+
+struct arg
+{
+  char **args;
+  bool loaded;
+};
+
+
+static struct child_process*
+make_child(tid_t tid)
+{
+ struct child_process *child = malloc(sizeof(struct child_process));
+ child->wait = false;
+ child->status = EXECUTING;
+ child->tid = tid;
+ struct list *list = &thread_current()->children_list;
+ list_push_back(list,&child->elem);
+// printf(">>>>>>>>>>>>>>. pushed %d\n",tid);
+ return child;
+}
 
 static int 
 get_numof_tokens(char ** tokens){
@@ -40,9 +65,9 @@ check_possible_overflow(char ** arguments){
   int total_length = 0;
   for (int i = 0; i < n; ++i)
   {
-    total_length += strlen(arguments[i]) + 1;
+    total_length += strnlen(arguments[i],MAX_ARG_LENGTH) + 1;
   }
-  int needed_page_size = (total_length/4)+n+3;
+  int needed_page_size = (total_length/4)+n+4;
   if(needed_page_size > PGSIZE)
     return true;
   return false;
@@ -64,36 +89,36 @@ push_arguments(char ** arguments,void **esp){
     stack_pointer -= arg_len;
     memcpy(stack_pointer, arguments[r_index], arg_len);
     addr[r_index]= stack_pointer;
-    // printf("%#08x: %s\n", addr[r_index],stack_pointer);   
+   // printf("%#08x: %s\n", addr[r_index],stack_pointer);   
     r_index--;
   }
   /* word align */
   stack_pointer -= WORD_SIZE - remain;
-  // if(remain !=0)
-    // printf("%#08x: %d\n", stack_pointer,0); 
+  //if(remain !=0)
+   // printf("%#08x: %d\n", stack_pointer,0); 
   /* Null argument */
    stack_pointer -= WORD_SIZE;
   *((uint32_t*) stack_pointer) = (uint32_t) NULL;
-  // printf("%#08x: %d\n", stack_pointer,0);
+  //printf("%#08x: %d\n", stack_pointer,0);
   /* set arguments' adresses */
   r_index = len-1;
   while(r_index >= 0){
     stack_pointer-= WORD_SIZE;
     *((char**) stack_pointer)= addr[r_index];
-    // printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
+    //printf("%#08x: %#08x\n", stack_pointer,addr[r_index]);  
     r_index--;
   }
   /* set argv address */ 
   stack_pointer-= WORD_SIZE;
-  *((void**) stack_pointer) = stack_pointer + WORD_SIZE;
-  // printf("%#08x: %#08x\n", stack_pointer,stack_pointer + WORD_SIZE);
+  *((void **) stack_pointer) = stack_pointer + WORD_SIZE;
+  //printf("%#08x: %#08x\n", stack_pointer,stack_pointer + WORD_SIZE);
   /* set argc & return value */ 
-  stack_pointer-= WORD_SIZE;
+  stack_pointer-= WORD_SIZE;  
   *((int*)stack_pointer) = len;
-  // printf("%#08x: %d\n", stack_pointer,len);  
+  //printf("%#08x: %d\n", stack_pointer,len);  
   stack_pointer-= WORD_SIZE;
-  *((uint32_t*)stack_pointer) = 0;
-  // printf("%#08x: %d\n", stack_pointer,0); 
+  *((int*)stack_pointer) = 0;
+  //printf("%#08x: %d\n", stack_pointer,0); 
   *esp = stack_pointer;
 }
 
@@ -120,7 +145,7 @@ process_execute (const char *cmd_line)
 {
   char *cmd_line_copy,*file_name;
   tid_t tid;
-  struct thread *cur_th = thread_current();
+
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   cmd_line_copy = palloc_get_page (0);
@@ -128,28 +153,43 @@ process_execute (const char *cmd_line)
     return TID_ERROR;
   strlcpy (cmd_line_copy, cmd_line, PGSIZE);
 
-  /* get arguments */
+  /* get arguments and check if they overflow the page*/
   char** args = tokenize(cmd_line_copy);
-  if(check_possible_overflow(args))
+  if(check_possible_overflow(args)){
+    palloc_free_page (cmd_line_copy);
+    palloc_free_page (args);
     return TID_ERROR;
+  }
   file_name = args[0];
-
+  /* initialize auxilary arument to the new thread */
+  struct arg aux_arg;
+  aux_arg.args = args;
+  aux_arg.loaded = false;
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, args);
+  struct child_process *ch = make_child(-3);
+  tid = thread_create (file_name, PRI_DEFAULT, start_process, &aux_arg);
+  ch->tid = tid;
+  sema_down(&thread_current()->sema_wait);
+  if(!aux_arg.loaded)
+    tid = TID_ERROR;
+
+  /* check error */
   if (tid == TID_ERROR){
     palloc_free_page (cmd_line_copy);
     palloc_free_page (args);
   }
+  /* set child process tid and parent list. */
   return tid;
 }
 
 /* A thread function that loads a user process and starts it
    running. */
 static void
-start_process (void *cmd_line_args)
+start_process (void *argument)
 {
-  const char ** args = (const char **) cmd_line_args;
-  const char* file_name = args[0];
+  struct arg *arg = (struct arg*) argument;
+  char ** args = (char **) arg->args;
+  const char* file_name = (const char*) args[0];
   struct intr_frame if_;
   bool success;
 
@@ -160,25 +200,46 @@ start_process (void *cmd_line_args)
   if_.eflags = FLAG_IF | FLAG_MBS;
   success = load (file_name, &if_.eip, &if_.esp);
   /* If load failed, quit. */
-  
-  if (!success) {
+  struct thread * t = thread_current();
+  if (!success){
+    sema_up(&t->parent->sema_wait);
     thread_exit ();
-    palloc_free_page (args);
-  }else
+  }
+  else{
+    arg->loaded = true;
+    sema_up(&t->parent->sema_wait);
     push_arguments(args,&if_.esp);
-
-  struct thread *t = thread_current();
-  sema_up(&t->wait_sema);
+  }
+  palloc_free_page (args);
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
      threads/intr-stubs.S).  Because intr_exit takes all of its
      arguments on the stack in the form of a `struct intr_frame',
      we just point the stack pointer (%esp) to our stack frame
      and jump to it. */
-  // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run Process\n");
+ // printf(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> Run Process\n");
   asm volatile ("movl %0, %%esp; jmp intr_exit" : : "g" (&if_) : "memory");
   NOT_REACHED ();
 }
+
+
+/* return thread with given tid , null if not found. */
+struct child_process * get_child(struct list * children,tid_t tid)
+{  
+  if(children == NULL)
+    return NULL;
+  struct list_elem *tid_elem;
+  struct child_process *ch = NULL;
+  for (tid_elem = list_begin (children); tid_elem != list_end (children); tid_elem = list_next (tid_elem))
+    {
+      ch = list_entry (tid_elem, struct child_process, elem);
+      if (ch->tid == tid)
+        return ch;
+    }
+  return NULL;
+}
+
+
 
 /* Waits for thread TID to die and returns its exit status.  If
    it was terminated by the kernel (i.e. killed due to an
@@ -186,22 +247,22 @@ start_process (void *cmd_line_args)
    child of the calling process, or if process_wait() has already
    been successfully called for the given TID, returns -1
    immediately, without waiting.
-   This function will be implemented in problem 2-2. */
+   This function will be implemented in problem 2-2.  For now, it
+   does nothing. */
 int
 process_wait (tid_t child_tid) 
 {
-  // while(1);
-
-  struct thread * t = get_thread(child_tid);
-
-
-  if(child_tid < 0 || t == NULL || t->status == THREAD_DYING)
+  //printf(">>>>>>>>. child_tid %d\n", child_tid);
+  struct child_process * child = get_child(&thread_current()->children_list,child_tid);
+  if(child_tid < 0 || child == NULL || child->wait == true)
     return -1;
-
-  sema_down(&t->wait_sema);
-  
-  return 0;
-
+  child->wait = true;
+  // printf(">>>>>>>>>>>>>>>>> child->status before %d\n",child->status );
+  while(child->status == EXECUTING){
+    barrier();
+  }
+  // printf(">>>>>>>>>>>>>>>>> child->status after %d\n",child->status );
+  return child->status;
 }
 
 /* Free the current process's resources. */
@@ -209,6 +270,9 @@ void
 process_exit (void)
 {
   struct thread *cur = thread_current ();
+  if(cur->exit_status == false){
+    exit(-1);
+  }
   uint32_t *pd;
 
   /* Destroy the current process's page directory and switch back
